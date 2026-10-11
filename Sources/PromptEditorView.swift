@@ -312,7 +312,7 @@ struct PromptEditorView: View {
                                 promptResetEpisodeID = episodeStore.episode.id
                                 showPromptResetConfirmation = true
                             } label: {
-                                Label("Reset", systemImage: "arrow.counterclockwise")
+                                Label("Reset Prompts", systemImage: "arrow.counterclockwise")
                             }
                             .buttonStyle(AgoraPillButtonStyle())
                             .disabled(isResolving || isPreparingTranscript)
