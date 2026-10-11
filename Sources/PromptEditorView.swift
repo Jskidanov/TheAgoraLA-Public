@@ -314,7 +314,7 @@ struct PromptEditorView: View {
                             } label: {
                                 Label("Reset", systemImage: "arrow.counterclockwise")
                             }
-                            .buttonStyle(AgoraOutlineButtonStyle())
+                            .buttonStyle(AgoraPillButtonStyle())
                             .disabled(isResolving || isPreparingTranscript)
                             .accessibilityLabel("Reset this episode's prompt progress")
                             .accessibilityHint("Clears answers and grades and rewinds this episode, keeping its questions and earned points")
