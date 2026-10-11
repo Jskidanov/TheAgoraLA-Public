@@ -25,6 +25,7 @@ private enum PromptCountMode: String, CaseIterable, Identifiable {
 
 struct PromptEditorView: View {
     @ObservedObject var episodeStore: EpisodeStore
+    let onResetPromptProgress: (UUID) -> Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var aiAccount: AIAccountStore
@@ -56,6 +57,9 @@ struct PromptEditorView: View {
     @State private var isLoadingSavedEpisode = false
     @State private var episodeDetailsExpanded = false
     @State private var addPromptExpanded = false
+    @State private var showPromptResetConfirmation = false
+    @State private var promptResetEpisodeID: UUID?
+    @State private var promptResetStatusText = ""
 
     var body: some View {
         let visiblePrompts = Array(episodeStore.episode.prompts.prefix(3))
@@ -299,9 +303,22 @@ struct PromptEditorView: View {
             if !episodeStore.episode.prompts.isEmpty {
                 AgoraCard {
                     VStack(alignment: .leading, spacing: 9) {
-                        Text("Complete prompt timeline")
-                            .font(AgoraTheme.tagFont)
-                            .foregroundColor(AgoraTheme.inkMuted)
+                        HStack(spacing: 12) {
+                            Text("Complete prompt timeline")
+                                .font(AgoraTheme.tagFont)
+                                .foregroundColor(AgoraTheme.inkMuted)
+                            Spacer(minLength: 8)
+                            Button {
+                                promptResetEpisodeID = episodeStore.episode.id
+                                showPromptResetConfirmation = true
+                            } label: {
+                                Label("Reset", systemImage: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(AgoraOutlineButtonStyle())
+                            .disabled(isResolving || isPreparingTranscript)
+                            .accessibilityLabel("Reset this episode's prompt progress")
+                            .accessibilityHint("Clears answers and grades and rewinds this episode, keeping its questions and earned points")
+                        }
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(episodeStore.episode.prompts.sorted { $0.timestampSeconds < $1.timestampSeconds }) { prompt in
@@ -312,6 +329,12 @@ struct PromptEditorView: View {
                         Text("\(episodeStore.episode.prompts.count) questions across \(formatEpisodeTime(promptEditorDurationSeconds)). Later prompts remain visible here even when their editor cards are collapsed below.")
                             .font(AgoraTheme.tagFont)
                             .foregroundColor(AgoraTheme.inkMuted)
+                        if !promptResetStatusText.isEmpty {
+                            Text(promptResetStatusText)
+                                .font(AgoraTheme.tagFont)
+                                .foregroundColor(AgoraTheme.accent)
+                                .accessibilityIdentifier("promptResetStatus")
+                        }
                     }
                 }
             }
@@ -424,6 +447,9 @@ struct PromptEditorView: View {
             resumeCloudAnalysisIfNeeded()
         }
         .onChange(of: episodeStore.episode.id) { _ in
+            showPromptResetConfirmation = false
+            promptResetEpisodeID = nil
+            promptResetStatusText = ""
             loadSavedEpisodeFields()
         }
         .onChange(of: audioURLText) { newValue in
@@ -436,6 +462,19 @@ struct PromptEditorView: View {
             importStatusText = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? ""
                 : "New link detected. Import will replace the current episode."
+        }
+        .alert("Reset Prompt Progress?", isPresented: $showPromptResetConfirmation) {
+            Button("Reset & Rewind", role: .destructive) {
+                guard let episodeID = promptResetEpisodeID,
+                      episodeStore.episode.id == episodeID else { return }
+                if onResetPromptProgress(episodeID) {
+                    promptResetStatusText = "Ready to replay. Tap Done, then Play to hear these questions again."
+                }
+                promptResetEpisodeID = nil
+            }
+            Button("Cancel", role: .cancel) { promptResetEpisodeID = nil }
+        } message: {
+            Text("This clears this episode's saved answers and grades and rewinds it to the beginning. Your prompts, transcript, and earned Agora Points are kept. Repeating an answer won't award the same points again.")
         }
         .alert("Invalid URL", isPresented: $showInvalidURL) {
             Button("OK", role: .cancel) {}

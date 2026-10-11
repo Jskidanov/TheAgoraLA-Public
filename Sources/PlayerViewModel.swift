@@ -5,11 +5,6 @@ import AVFoundation
 import UIKit
 #endif
 
-private struct PromptHistorySnapshot: Codable {
-    let responses: [PromptResponse]
-    let encounteredPromptIDs: [UUID]
-}
-
 private enum NaturalNarrationError: Error {
     case unavailable
     case invalidResponse
@@ -89,6 +84,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private var promptedIDs = Set<UUID>()
+    private var earnedPointsByPrompt: [UUID: Int] = [:]
+    private var promptSessionGeneration = UUID()
     private var promptTriggerTimes: [UUID: Double] = [:]
     private let nowPlaying = NowPlayingManager.shared
     private weak var pointsStore: PointsStore?
@@ -311,6 +308,56 @@ final class PlayerViewModel: NSObject, ObservableObject {
         }
     }
 
+    @discardableResult
+    func resetPromptProgress(for episodeID: UUID) -> Bool {
+        guard episode.id == episodeID, !episode.prompts.isEmpty else { return false }
+
+        promptSessionGeneration = UUID()
+        isEvaluating = false
+        autoContinueTask?.cancel()
+        autoContinueTask = nil
+        audioManager.setPlaybackHeld(true)
+        cancelDrivingFlow()
+        // Also invalidate a microphone start that is still awaiting permission.
+        speechManager.stopRecording()
+
+        let resetHistory = PromptHistorySnapshot(
+            responses: Array(promptResponses.values),
+            encounteredPromptIDs: encounteredPromptIDs,
+            earnedPointsByPrompt: earnedPointsByPrompt
+        ).resettingProgress()
+        earnedPointsByPrompt = resetHistory.pointAwardHistory
+        promptResponses = [:]
+        encounteredPromptIDs = []
+        promptedIDs = []
+        promptTriggerTimes = [:]
+        promptResults = []
+        activePrompt = nil
+        showPrompt = false
+        answerText = ""
+        feedbackText = ""
+        lastScore = 0
+        lastGrade = .f
+        lastAwardedPoints = 0
+        hasScoredActivePrompt = false
+        persistPromptHistory()
+
+        pendingPlaybackRestore = nil
+        isApplyingPlaybackRestore = true
+        audioManager.seek(to: 0)
+        currentTime = 0
+        isPlaying = false
+        isApplyingPlaybackRestore = false
+        UserDefaults.standard.set(0, forKey: Self.playbackPositionKey(for: episodeID))
+        lastPersistedEpisodeID = episodeID
+        lastPersistedPosition = 0
+        lastPlaybackPositionWrite = Date()
+        nowPlaying.update(elapsed: 0, isPlaying: false, duration: audioManager.duration)
+        audioManager.setPlaybackHeld(false)
+        if drivingModeEnabled { drivingStatusText = "Ready to replay. Press Play to begin." }
+        return true
+    }
+
     func togglePlay() {
         if audioManager.isPlaying {
             audioManager.pause()
@@ -487,12 +534,15 @@ final class PlayerViewModel: NSObject, ObservableObject {
         guard !isEvaluating else { return }
         guard canSubmitActiveAnswer else { return }
 
+        let evaluatedSession = promptSessionGeneration
         isEvaluating = true
         if drivingModeEnabled {
             drivingPromptState = .submitting
             drivingStatusText = "Grading your answer..."
         }
-        defer { isEvaluating = false }
+        defer {
+            if promptSessionGeneration == evaluatedSession { isEvaluating = false }
+        }
 
         let result = await aiService.evaluateAnswer(
             question: prompt.question,
@@ -502,14 +552,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
             progressSeconds: audioManager.currentTime,
             analysisDepth: answerAnalysisDepth
         )
+        guard promptSessionGeneration == evaluatedSession else { return }
 
-        let previousAward = promptResponses[prompt.id]?.awardedPoints ?? 0
+        let previousAward = earnedPointsByPrompt[prompt.id] ?? promptResponses[prompt.id]?.awardedPoints ?? 0
         let totalAward = max(previousAward, result.awardedPoints)
         let newlyEarnedPoints = max(totalAward - previousAward, 0)
+        earnedPointsByPrompt[prompt.id] = totalAward
+        let sessionAward = (promptResponses[prompt.id]?.awardedPoints ?? 0) + newlyEarnedPoints
 
         lastScore = result.score
         lastGrade = result.grade
-        lastAwardedPoints = totalAward
+        lastAwardedPoints = sessionAward
         feedbackText = result.feedback
         hasScoredActivePrompt = true
         promptResponses[prompt.id] = PromptResponse(
@@ -517,7 +570,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
             answer: answerText,
             score: result.score,
             grade: result.grade,
-            awardedPoints: totalAward,
+            awardedPoints: sessionAward,
             feedback: result.feedback,
             lastUpdated: Date()
         )
@@ -526,7 +579,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
             answer: answerText,
             score: result.score,
             grade: result.grade,
-            awardedPoints: totalAward,
+            awardedPoints: sessionAward,
             feedback: result.feedback
         )
         if let index = promptResults.firstIndex(where: { $0.prompt.id == prompt.id }) {
@@ -719,13 +772,14 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
     private func stopListeningAndSubmitIfPossible() async {
         guard drivingPromptState == .listening else { return }
+        let listeningSession = promptSessionGeneration
         drivingPromptState = .submitting
         drivingStatusText = "Finishing your response..."
         silenceWatchTask?.cancel()
         silenceWatchTask = nil
         let transcript = await speechManager.finishRecording()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard drivingModeEnabled, showPrompt else { return }
+        guard drivingModeEnabled, showPrompt, promptSessionGeneration == listeningSession else { return }
         guard !transcript.isEmpty else {
             await handleEmptyListeningAttempt()
             return
@@ -966,11 +1020,13 @@ final class PlayerViewModel: NSObject, ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: historyKey(for: episode.id)),
               let snapshot = try? JSONDecoder().decode(PromptHistorySnapshot.self, from: data) else {
             promptResponses = [:]
+            earnedPointsByPrompt = [:]
             encounteredPromptIDs = []
             promptedIDs = []
             return
         }
         let validPromptIDs = Set(episode.prompts.map(\.id))
+        earnedPointsByPrompt = snapshot.pointAwardHistory.filter { validPromptIDs.contains($0.key) }
         promptResponses = Dictionary(
             uniqueKeysWithValues: snapshot.responses
                 .filter { validPromptIDs.contains($0.promptID) }
@@ -983,7 +1039,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private func persistPromptHistory() {
         let snapshot = PromptHistorySnapshot(
             responses: Array(promptResponses.values),
-            encounteredPromptIDs: encounteredPromptIDs
+            encounteredPromptIDs: encounteredPromptIDs,
+            earnedPointsByPrompt: earnedPointsByPrompt
         )
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         UserDefaults.standard.set(data, forKey: historyKey(for: episode.id))

@@ -53,7 +53,11 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showEditor) {
                 ScrollView {
-                    PromptEditorView(episodeStore: episodeStore)
+                    PromptEditorView(episodeStore: episodeStore) { episodeID in
+                        guard episodeStore.episode.id == episodeID else { return false }
+                        viewModel.updateEpisode(episodeStore.episode)
+                        return viewModel.resetPromptProgress(for: episodeID)
+                    }
                         .padding(.vertical, 24)
                 }
                 .background(AgoraBackgroundView())

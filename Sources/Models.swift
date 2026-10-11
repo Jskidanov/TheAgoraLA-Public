@@ -175,6 +175,30 @@ struct Prompt: Identifiable, Codable {
     }
 }
 
+struct PromptHistorySnapshot: Codable {
+    let responses: [PromptResponse]
+    let encounteredPromptIDs: [UUID]
+    let earnedPointsByPrompt: [UUID: Int]?
+
+    init(responses: [PromptResponse], encounteredPromptIDs: [UUID], earnedPointsByPrompt: [UUID: Int]? = nil) {
+        self.responses = responses
+        self.encounteredPromptIDs = encounteredPromptIDs
+        self.earnedPointsByPrompt = earnedPointsByPrompt
+    }
+
+    var pointAwardHistory: [UUID: Int] {
+        var awards = (earnedPointsByPrompt ?? [:]).mapValues { max($0, 0) }
+        for response in responses {
+            awards[response.promptID] = max(awards[response.promptID] ?? 0, response.awardedPoints)
+        }
+        return awards
+    }
+
+    func resettingProgress() -> PromptHistorySnapshot {
+        PromptHistorySnapshot(responses: [], encounteredPromptIDs: [], earnedPointsByPrompt: pointAwardHistory)
+    }
+}
+
 struct PromptResult: Identifiable {
     let id = UUID()
     let prompt: Prompt
