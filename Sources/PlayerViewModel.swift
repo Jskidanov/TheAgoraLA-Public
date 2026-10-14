@@ -50,7 +50,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
-    @Published var drivingModeEnabled = false
+    @Published var drivingModeEnabled = HandsFreePreference.isEnabled()
     @Published private(set) var drivingPromptState: DrivingPromptState = .idle
     @Published private(set) var drivingStatusText: String = ""
     @Published private(set) var handsFreeNeedsSettings = false
@@ -229,6 +229,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     func setHandsFreeMode(_ enabled: Bool) {
+        HandsFreePreference.setEnabled(enabled)
         guard enabled != drivingModeEnabled else { return }
         drivingModeEnabled = enabled
 

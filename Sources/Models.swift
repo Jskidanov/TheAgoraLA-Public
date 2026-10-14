@@ -1,5 +1,17 @@
 import Foundation
 
+enum HandsFreePreference {
+    private static let key = "TheAgoraLA.CompleteHandsFree"
+
+    static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: key) as? Bool ?? true
+    }
+
+    static func setEnabled(_ enabled: Bool, in defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: key)
+    }
+}
+
 enum PromptGrade: String, Codable {
     case a = "A"
     case b = "B"
