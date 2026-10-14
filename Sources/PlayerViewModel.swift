@@ -5,11 +5,6 @@ import AVFoundation
 import UIKit
 #endif
 
-private enum NaturalNarrationError: Error {
-    case unavailable
-    case invalidResponse
-}
-
 struct NarrationVoiceOption: Identifiable, Hashable {
     static let automaticID = "automatic"
 
@@ -58,6 +53,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     @Published var selectedNarrationVoiceID: String {
         didSet {
             UserDefaults.standard.set(selectedNarrationVoiceID, forKey: Self.narrationVoiceKey)
+            prefetchUpcomingPromptNarration()
         }
     }
     @Published var feedbackDetailLevel: FeedbackDetailLevel {
@@ -79,6 +75,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var naturalNarrationPlayer: AVAudioPlayer?
     private var naturalNarrationTask: Task<Void, Never>?
+    private var narrationPrefetchTask: Task<Void, Never>?
+    private var narrationPrefetchSignature: String?
     private var activeNaturalNarrationID: UUID?
     private var activeNaturalNarrationState: DrivingPromptState?
     private var cancellables = Set<AnyCancellable>()
@@ -232,6 +230,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         HandsFreePreference.setEnabled(enabled)
         guard enabled != drivingModeEnabled else { return }
         drivingModeEnabled = enabled
+        prefetchUpcomingPromptNarration()
 
         guard enabled else {
             handsFreeNeedsSettings = false
@@ -307,6 +306,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 hasScoredActivePrompt = false
             }
         }
+        prefetchUpcomingPromptNarration()
     }
 
     @discardableResult
@@ -356,6 +356,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         nowPlaying.update(elapsed: 0, isPlaying: false, duration: audioManager.duration)
         audioManager.setPlaybackHeld(false)
         if drivingModeEnabled { drivingStatusText = "Ready to replay. Press Play to begin." }
+        prefetchUpcomingPromptNarration()
         return true
     }
 
@@ -363,6 +364,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         if audioManager.isPlaying {
             audioManager.pause()
         } else {
+            prefetchUpcomingPromptNarration()
             audioManager.play()
         }
     }
@@ -400,6 +402,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
     func checkForPrompt(at time: Double) {
         guard interactiveModeEnabled else { return }
+        prefetchUpcomingPromptNarration()
         guard !showPrompt else { return }
         guard audioManager.isPlaying else { return }
         let duration = audioManager.duration
@@ -620,6 +623,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         showPrompt = false
         activePrompt = nil
         audioManager.setPlaybackHeld(false)
+        prefetchUpcomingPromptNarration()
         audioManager.play()
     }
 
@@ -668,7 +672,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         microphoneStartRetryCount = 0
         drivingPromptState = .announcingPrompt
         drivingStatusText = "Reading prompt..."
-        speak(text: "Here’s your Agora check-in. \(prompt.question) Take your time.")
+        speak(text: NaturalNarrationService.promptText(question: prompt.question), persist: true)
     }
 
     private func startListening() async {
@@ -793,7 +797,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 guard let prompt = activePrompt else { return }
                 drivingPromptState = .announcingPrompt
                 drivingStatusText = "Repeating the question..."
-                speak(text: "Of course. \(prompt.question)")
+                speak(text: NaturalNarrationService.promptText(question: prompt.question), persist: true)
             case .startOver:
                 drivingPromptState = .retryingListening
                 drivingStatusText = "Starting your answer over..."
@@ -1112,15 +1116,51 @@ final class PlayerViewModel: NSObject, ObservableObject {
         playbackPositionKeyPrefix + episodeID.uuidString
     }
 
-    private func speak(text: String) {
+    private func prefetchUpcomingPromptNarration() {
+        guard drivingModeEnabled, selectedNarrationVoiceID == NarrationVoiceOption.automaticID else {
+            narrationPrefetchTask?.cancel()
+            narrationPrefetchTask = nil
+            narrationPrefetchSignature = nil
+            return
+        }
+        let questions = episode.prompts.sorted { $0.timestampSeconds < $1.timestampSeconds }
+            .filter { !promptedIDs.contains($0.id) }.prefix(2)
+            .map { NaturalNarrationService.promptText(question: $0.question) }
+        guard !questions.isEmpty else {
+            narrationPrefetchTask?.cancel()
+            narrationPrefetchTask = nil
+            narrationPrefetchSignature = nil
+            return
+        }
+        let signature = ([episode.id.uuidString] + questions).joined(separator: "\n")
+        guard signature != narrationPrefetchSignature,
+              let apiKey = AIAccountStore.apiKey(), !apiKey.isEmpty else { return }
+        // Respect an explicit AI-processing opt-out, including when the key is still saved.
+        guard UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false else { return }
+        narrationPrefetchSignature = signature
+        narrationPrefetchTask?.cancel()
+        narrationPrefetchTask = Task {
+            // Debounce prompt edits so typing does not generate a paid clip per keystroke.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            for text in questions {
+                guard !Task.isCancelled, AIAccountStore.apiKey() == apiKey,
+                      UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false else { return }
+                _ = try? await NaturalNarrationService.shared.audio(for: text, apiKey: apiKey, persist: true)
+            }
+        }
+    }
+
+    private func speak(text: String, persist: Bool = false) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         cancelActiveNarration()
 
         let expectedState = drivingPromptState
-        if selectedNarrationVoiceID == NarrationVoiceOption.automaticID,
-           let apiKey = AIAccountStore.apiKey(),
-           !apiKey.isEmpty {
-            startNaturalNarration(text: text, apiKey: apiKey, expectedState: expectedState)
+        if selectedNarrationVoiceID == NarrationVoiceOption.automaticID {
+            let permitsNetwork = UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false
+            startNaturalNarration(
+                text: text, apiKey: permitsNetwork ? AIAccountStore.apiKey() : nil,
+                expectedState: expectedState, persist: persist
+            )
         } else {
             startOnDeviceNarration(text: text, expectedState: expectedState)
         }
@@ -1128,8 +1168,9 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
     private func startNaturalNarration(
         text: String,
-        apiKey: String,
-        expectedState: DrivingPromptState
+        apiKey: String?,
+        expectedState: DrivingPromptState,
+        persist: Bool
     ) {
         let narrationID = UUID()
         activeNaturalNarrationID = narrationID
@@ -1147,12 +1188,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
         naturalNarrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let data = try await self.fetchNaturalNarration(text: text, apiKey: apiKey)
+                let data = try await NaturalNarrationService.shared.audio(for: text, apiKey: apiKey, persist: persist)
                 try Task.checkCancellation()
                 guard self.activeNaturalNarrationID == narrationID,
                       self.activeNaturalNarrationState == expectedState,
                       self.drivingPromptState == expectedState else { return }
-                try self.playNaturalNarration(data, narrationID: narrationID, expectedState: expectedState)
+                do {
+                    try self.playNaturalNarration(data, narrationID: narrationID, expectedState: expectedState)
+                } catch NaturalNarrationError.invalidAudio {
+                    await NaturalNarrationService.shared.discardAudio(for: text)
+                    throw NaturalNarrationError.invalidAudio
+                }
                 self.naturalNarrationTask = nil
                 if expectedState == .speakingFeedback {
                     self.drivingStatusText = "Reading feedback..."
@@ -1168,44 +1214,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 self.activeNaturalNarrationID = nil
                 self.activeNaturalNarrationState = nil
                 self.naturalNarrationTask = nil
-                self.startOnDeviceNarration(text: text, expectedState: expectedState)
-                if expectedState == .speakingFeedback {
-                    self.drivingStatusText = "Reading feedback with the on-device voice..."
-                } else if expectedState == .announcingPrompt || expectedState == .retryingListening {
-                    self.drivingStatusText = "Reading prompt with the on-device voice..."
+                // Never silently replace the natural narrator with a basic robotic voice.
+                if let voice = Self.rankedEnglishVoices(AVSpeechSynthesisVoice.speechVoices())
+                    .first(where: { $0.quality == .premium || $0.quality == .enhanced }) {
+                    self.startOnDeviceNarration(text: text, expectedState: expectedState, voice: voice)
+                    self.drivingStatusText = "Natural voice unavailable. Reading with your downloaded \(Self.qualityName(voice.quality).lowercased()) voice."
+                } else {
+                    self.drivingPromptState = .idle
+                    self.drivingStatusText = "Natural voice unavailable. \(error.localizedDescription) Tap the microphone to retry the question, or continue using the text."
                 }
             }
         }
-    }
-
-    private func fetchNaturalNarration(text: String, apiKey: String) async throws -> Data {
-        guard let url = URL(string: "https://openrouter.ai/api/v1/audio/speech") else {
-            throw NaturalNarrationError.unavailable
-        }
-        let input = String(text.prefix(4_000))
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 18
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(AppLinks.home.absoluteString, forHTTPHeaderField: "HTTP-Referer")
-        request.setValue("Agora Interactive Podcast", forHTTPHeaderField: "X-Title")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": "microsoft/mai-voice-2",
-            "input": input,
-            "voice": "en-US-Harper:MAI-Voice-2",
-            "response_format": "mp3",
-            "speed": 0.94,
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200...299).contains(http.statusCode),
-              http.value(forHTTPHeaderField: "Content-Type")?.lowercased().contains("audio") == true,
-              data.count > 1_000 else {
-            throw NaturalNarrationError.invalidResponse
-        }
-        return data
     }
 
     private func playNaturalNarration(
@@ -1221,10 +1240,16 @@ final class PlayerViewModel: NSObject, ObservableObject {
             throw NaturalNarrationError.unavailable
         }
 
-        let player = try AVAudioPlayer(data: data)
+        let player: AVAudioPlayer
+        do {
+            player = try AVAudioPlayer(data: data)
+        } catch {
+            throw NaturalNarrationError.invalidAudio
+        }
         player.delegate = self
         player.volume = 1
-        guard player.prepareToPlay(), player.play() else {
+        guard player.prepareToPlay() else { throw NaturalNarrationError.invalidAudio }
+        guard player.play() else {
             throw NaturalNarrationError.unavailable
         }
         naturalNarrationPlayer = player
@@ -1232,14 +1257,14 @@ final class PlayerViewModel: NSObject, ObservableObject {
         activeNaturalNarrationState = expectedState
     }
 
-    private func startOnDeviceNarration(text: String, expectedState: DrivingPromptState) {
+    private func startOnDeviceNarration(text: String, expectedState: DrivingPromptState, voice: AVSpeechSynthesisVoice? = nil) {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .spokenAudio, options: [])
             try session.setActive(true, options: [])
         } catch {}
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = selectedNarrationVoice()
+        utterance.voice = voice ?? selectedNarrationVoice()
         utterance.rate = 0.47
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
@@ -1346,7 +1371,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         let automatic = NarrationVoiceOption(
             id: NarrationVoiceOption.automaticID,
             name: "Natural AI Voice",
-            detail: "AI-generated studio narration through your connected provider, with an on-device fallback"
+            detail: "Upcoming questions are prepared ahead and replayed with the same natural AI voice. Only a downloaded Premium or Enhanced voice is used if the service is unavailable."
         )
         let installed = Array(rankedEnglishVoices(AVSpeechSynthesisVoice.speechVoices()).prefix(8))
         return [automatic] + installed.map { voice in

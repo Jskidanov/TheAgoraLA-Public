@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E61000000000000000000001 /* NaturalNarrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61000000000000000000002 /* NaturalNarrationService.swift */; };
 		131DBE4BBAAD433D97BA87D5 /* AgoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A73052939B46278D556316 /* AgoraTheme.swift */; };
 		3B0607BD6B87444A8F669AF0 /* InteractivePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D700D956A164F9BAA62967B /* InteractivePromptView.swift */; };
 		4634D2F94C7E45D7AB4A9C55 /* MockEpisodeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C56CF91ADD446C496ED0F9A /* MockEpisodeProvider.swift */; };
@@ -39,6 +40,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E61000000000000000000002 /* NaturalNarrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalNarrationService.swift; sourceTree = "<group>"; };
 		06B0D364C26C4A6DA402C364 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		0C56CF91ADD446C496ED0F9A /* MockEpisodeProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockEpisodeProvider.swift; sourceTree = "<group>"; };
 		0D52757C74534546B8BB111F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 		AAA180B6519E49E782DD73EA /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E61000000000000000000002 /* NaturalNarrationService.swift */,
 				B202C0017A1E4A8B9C0D1E11 /* AIAccountStore.swift */,
 				B202C0017A1E4A8B9C0D1E12 /* AIAccountView.swift */,
 				66088B3AA6FE4E9D89481445 /* AIService.swift */,
@@ -215,6 +218,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E61000000000000000000001 /* NaturalNarrationService.swift in Sources */,
 				B202C0017A1E4A8B9C0D1E01 /* AIAccountStore.swift in Sources */,
 				B202C0017A1E4A8B9C0D1E02 /* AIAccountView.swift in Sources */,
 				A203DAD3BD27422E91B5F212 /* AIService.swift in Sources */,
