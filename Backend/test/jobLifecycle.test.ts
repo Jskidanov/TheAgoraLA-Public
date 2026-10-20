@@ -13,6 +13,16 @@ vi.mock("../src/auth.js", () => ({
 const id = "b6dbb1f3-3f1d-4b60-9d13-d4d0f2c61ff8";
 
 describe("cloud job lifecycle", () => {
+  it("reports database failures instead of advertising a healthy cloud service", async () => {
+    const query = vi.fn().mockRejectedValue(new Error("Database unavailable"));
+    const app = buildApp({ config: {} as AppConfig, database: { query } as unknown as Database });
+    try {
+      const response = await app.inject({ method: "GET", url: "/health" });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ status: "unavailable", database: "unavailable" });
+    } finally { await app.close(); }
+  });
+
   it("requires an authenticated owner before canceling", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ id }], rowCount: 1 });
     const app = buildApp({ config: {} as AppConfig, database: { query } as unknown as Database });
@@ -39,11 +49,11 @@ describe("cloud job lifecycle", () => {
     } finally { await app.close(); }
   });
 
-  it("only expires successful results after a device acknowledges saving", async () => {
+  it("expires every job after the promised retention window, even without acknowledgement", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
     await deleteExpiredJobs({ query } as unknown as Database, 7);
     const sql = query.mock.calls[0]?.[0];
-    expect(sql).toContain("status = 'complete' AND acknowledged_at <");
-    expect(sql).toContain("status = 'failed' AND completed_at <");
+    expect(sql).toContain("created_at < NOW() - make_interval(days => $1)");
+    expect(sql).not.toContain("acknowledged_at");
   });
 });

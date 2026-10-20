@@ -104,6 +104,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private var isChangingEpisode = false
     private var isApplyingPlaybackRestore = false
     private var autoContinueTask: Task<Void, Never>?
+    private var evaluationID: UUID?
     private static let narrationVoiceKey = "TheAgoraLA.NarrationVoice"
     // ".v2" avoids reinterpreting an old saved rawValue under the 3-case scheme (old 1 meant full, new 1 means balanced).
     private static let feedbackDetailLevelKey = "TheAgoraLA.FeedbackDetailLevel.v2"
@@ -259,6 +260,10 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     func updateEpisode(_ updated: Episode) {
+        if episode.id != updated.id || episode.audioURL != updated.audioURL {
+            evaluationID = nil
+            isEvaluating = false
+        }
         let sourceChanged = episode.id != updated.id || episode.audioURL != updated.audioURL
         let playerNeedsReload = !updated.audioURL.isFileURL && audioManager.loadedURL != updated.audioURL
         if sourceChanged {
@@ -423,7 +428,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private func triggerTime(for prompt: Prompt, duration: Double) -> Double {
         if let cached = promptTriggerTimes[prompt.id] { return cached }
 
-        let alignedEnd = alignedAnswerEnd(for: prompt, duration: duration)
+        let alignedEnd = prompt.timingVerified ? nil : alignedAnswerEnd(for: prompt, duration: duration)
         let answerEnd: Double
         if prompt.timestampSeconds.isFinite, prompt.timestampSeconds > 1 {
             answerEnd = max(min(prompt.timestampSeconds, duration), alignedEnd ?? 0)
@@ -519,7 +524,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         let answer = answerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !answer.isEmpty, !isEvaluating else { return false }
         guard let saved = promptResponses[prompt.id], saved.score != nil else { return true }
-        return saved.answer.trimmingCharacters(in: .whitespacesAndNewlines) != answer
+        return saved.usedOfflineEstimate == true || saved.answer.trimmingCharacters(in: .whitespacesAndNewlines) != answer
     }
 
     func activeAnswerDidChange() {
@@ -540,23 +545,41 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
         let evaluatedSession = promptSessionGeneration
         isEvaluating = true
+        let requestID = UUID()
+        evaluationID = requestID
+        let evaluatedEpisodeID = episode.id
+        let evaluatedAnswer = answerText
+        let backgroundTask = AnswerGradingBackgroundLease()
         if drivingModeEnabled {
             drivingPromptState = .submitting
             drivingStatusText = "Grading your answer..."
         }
         defer {
-            if promptSessionGeneration == evaluatedSession { isEvaluating = false }
+            backgroundTask.end()
+            if evaluationID == requestID, promptSessionGeneration == evaluatedSession {
+                isEvaluating = false
+                evaluationID = nil
+            }
         }
 
         let result = await aiService.evaluateAnswer(
             question: prompt.question,
             expectedAnswer: prompt.expectedAnswer,
-            userAnswer: answerText,
+            userAnswer: evaluatedAnswer,
             transcript: episode.transcript,
             progressSeconds: audioManager.currentTime,
             analysisDepth: answerAnalysisDepth
         )
         guard promptSessionGeneration == evaluatedSession else { return }
+        guard evaluationID == requestID, episode.id == evaluatedEpisodeID,
+              activePrompt?.id == prompt.id, showPrompt else { return }
+        guard answerText == evaluatedAnswer else {
+            if drivingModeEnabled {
+                drivingPromptState = .idle
+                drivingStatusText = "Your answer changed. Submit it again when you're ready."
+            }
+            return
+        }
 
         let previousAward = earnedPointsByPrompt[prompt.id] ?? promptResponses[prompt.id]?.awardedPoints ?? 0
         let totalAward = max(previousAward, result.awardedPoints)
@@ -571,16 +594,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
         hasScoredActivePrompt = true
         promptResponses[prompt.id] = PromptResponse(
             promptID: prompt.id,
-            answer: answerText,
+            answer: evaluatedAnswer,
             score: result.score,
             grade: result.grade,
             awardedPoints: sessionAward,
             feedback: result.feedback,
-            lastUpdated: Date()
+            lastUpdated: Date(),
+            usedOfflineEstimate: result.usedOfflineEstimate
         )
         let promptResult = PromptResult(
             prompt: prompt,
-            answer: answerText,
+            answer: evaluatedAnswer,
             score: result.score,
             grade: result.grade,
             awardedPoints: sessionAward,
@@ -616,6 +640,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     func continuePlayback() {
+        evaluationID = nil
+        isEvaluating = false
         autoContinueTask?.cancel()
         autoContinueTask = nil
         saveActiveDraft()
@@ -877,23 +903,10 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
     func appDidEnterBackground() {
         persistPlaybackPosition(force: true)
-        guard drivingModeEnabled, showPrompt else { return }
-        guard drivingPromptState == .announcingPrompt
-                || drivingPromptState == .listening
-                || drivingPromptState == .retryingListening else { return }
-
-        handsFreePausedForInterruption = true
-        silenceWatchTask?.cancel()
-        silenceWatchTask = nil
-        speechWatchdogTask?.cancel()
-        speechWatchdogTask = nil
-        speechManager.stopRecording()
-        cancelActiveNarration()
-        drivingPromptState = .idle
-        drivingStatusText = "Hands-free paused while the app is in the background."
     }
 
     func appDidBecomeActive() {
+        Task { await CloudAnalysisClient.retryAcknowledgements() }
         restorePlaybackPositionIfReady(duration: audioManager.duration)
         guard handsFreePausedForInterruption else { return }
         handsFreePausedForInterruption = false
@@ -911,7 +924,14 @@ final class PlayerViewModel: NSObject, ObservableObject {
         case .began:
             switch drivingPromptState {
             case .announcingPrompt, .listening, .retryingListening:
-                appDidEnterBackground()
+                handsFreePausedForInterruption = true
+                silenceWatchTask?.cancel()
+                silenceWatchTask = nil
+                speechWatchdogTask?.cancel()
+                speechWatchdogTask = nil
+                speechManager.stopRecording()
+                cancelActiveNarration()
+                drivingPromptState = .idle
                 drivingStatusText = "Hands-free paused for another audio session."
             case .speakingFeedback:
                 shouldResumeFeedbackAfterInterruption = true
@@ -959,6 +979,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     private func activatePrompt(_ prompt: Prompt, beginDriving: Bool) {
+        evaluationID = nil
+        isEvaluating = false
         audioManager.setPlaybackHeld(true)
         markPromptEncountered(prompt)
         activePrompt = prompt
@@ -1472,6 +1494,23 @@ extension PlayerViewModel: AVSpeechSynthesizerDelegate {
                 ? "Feedback narration stopped. Review it below, then continue when you're ready."
                 : "Narration stopped. Tap the microphone to try again."
         }
+    }
+}
+
+@MainActor
+private final class AnswerGradingBackgroundLease {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init() {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "Finish answer grading") { [weak self] in
+            Task { @MainActor in self?.end() }
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }
 

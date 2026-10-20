@@ -96,8 +96,7 @@ enum PodcastPromptPolicy {
         let words = transcript.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
         guard words >= 120 else { return false }
         guard let duration, duration.isFinite, duration >= 600 else { return true }
-        let estimatedSpokenDuration = Double(words) / 2.6
-        return estimatedSpokenDuration >= duration * 0.35
+        return Double(words) >= duration * 1.25
     }
 }
 
@@ -361,8 +360,13 @@ final class AIService {
     ) async throws -> EpisodeAnalysisResult {
         let completeTranscript = transcript?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let usableTranscript = completeTranscript.flatMap {
-            PodcastPromptPolicy.transcriptAppearsComplete($0, duration: audioDuration) ? $0 : nil
+        let usableTranscript = completeTranscript.flatMap { value -> String? in
+            let segments = TranscriptTiming.segments(in: value)
+            guard let last = segments.last,
+                  segments.allSatisfy({ $0.end <= (audioDuration ?? last.end) + 2 }),
+                  last.end >= (audioDuration ?? last.end) * 0.90,
+                  PodcastPromptPolicy.transcriptAppearsComplete(TranscriptTiming.plainText(value), duration: audioDuration) else { return nil }
+            return value
         }
         let resolvedTranscript: String
         let transcriptionDuration: Double?
@@ -558,7 +562,7 @@ final class AIService {
         guard !isStockQuestion(question), wordCount(question) >= 7, wordCount(question) <= 36 else { return nil }
         guard wordCount(answer) >= 10, wordCount(answer) <= 110 else { return nil }
 
-        let transcriptKey = normalizedText(transcript)
+        let transcriptKey = normalizedText(TranscriptTiming.plainText(transcript))
         let validEvidence = generated.evidence.filter { evidence in
             let key = normalizedText(evidence.quote)
             return key.count >= 20 && transcriptKey.contains(key)
@@ -566,7 +570,7 @@ final class AIService {
         let evidenceQuotes = validEvidence
             .map(\.quote)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard !evidenceQuotes.isEmpty else { return nil }
+        guard !evidenceQuotes.isEmpty, validEvidence.count == generated.evidence.count else { return nil }
 
         let evidenceTokens = meaningfulTokens(evidenceQuotes.joined(separator: " "))
         let questionTokens = meaningfulTokens(question)
@@ -584,7 +588,7 @@ final class AIService {
         guard let timestamp = promptTimestamp(
             generatedTime: generated.time,
             evidence: validEvidence,
-            normalizedTranscript: transcriptKey,
+            normalizedTranscript: transcript,
             duration: duration
         ) else { return nil }
         let combinedScore = ((scores?.overall ?? 0) * 0.30)
@@ -600,7 +604,8 @@ final class AIService {
                 timestampSeconds: timestamp,
                 question: question,
                 expectedAnswer: answer,
-                leadTimeSeconds: 0
+                leadTimeSeconds: 0,
+                timingVerified: true
             ),
             score: combinedScore,
             priorityID: generated.priorityID
@@ -613,30 +618,11 @@ final class AIService {
         normalizedTranscript: String,
         duration: Double
     ) -> Double? {
-        var answerEndCandidates: [Double] = []
-
-        if let generatedTime, generatedTime.isFinite, generatedTime > 0 {
-            answerEndCandidates.append(min(generatedTime, duration))
+        let answerEndCandidates = evidence.compactMap {
+            TranscriptTiming.evidenceEnd(quote: $0.quote, transcript: normalizedTranscript)
         }
-        answerEndCandidates.append(contentsOf: evidence.compactMap { item in
-            guard let end = item.endSeconds, end.isFinite, end > 0 else { return nil }
-            return min(end, duration)
-        })
-
-        for item in evidence {
-            let quote = normalizedText(item.quote)
-            guard !quote.isEmpty,
-                  let range = normalizedTranscript.range(of: quote, options: .backwards),
-                  !normalizedTranscript.isEmpty else { continue }
-            let charactersThroughAnswer = normalizedTranscript.distance(
-                from: normalizedTranscript.startIndex,
-                to: range.upperBound
-            )
-            let transcriptProgress = Double(charactersThroughAnswer) / Double(normalizedTranscript.count)
-            answerEndCandidates.append(min(max(transcriptProgress, 0), 1) * duration)
-        }
-
-        guard let answerEnd = answerEndCandidates.max(), answerEnd.isFinite else { return nil }
+        guard answerEndCandidates.count == evidence.count else { return nil }
+        guard let answerEnd = answerEndCandidates.max(), answerEnd.isFinite, answerEnd <= duration + 2 else { return nil }
         let leadIn = PodcastPromptPolicy.leadIn(for: duration)
         guard leadIn == 0 || answerEnd >= leadIn else { return nil }
         let listeningBuffer = min(12, max(6, duration * 0.0025))

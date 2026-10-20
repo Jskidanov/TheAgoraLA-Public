@@ -40,7 +40,8 @@ export default function SupportPage() {
       <p>
         Connect an AI provider account you control, choose automatic or manual
         prompt count, then select <strong>Import, Analyze &amp; Save</strong>. Agora
-        prefers a publisher-provided transcript. When none is available,
+        prefers a complete publisher-provided transcript with audio timestamps.
+        When verified timing is unavailable,
         accessible episode audio is transcribed in the secure cloud job using
         your authorized provider.
       </p>
@@ -56,6 +57,7 @@ export default function SupportPage() {
         and follow the three guided steps:
       </p>
       <ol>
+        <li>Read the AI-sharing explanation and enable <strong>Allow AI processing</strong>.</li>
         <li>
           Choose <strong>Connect Automatically</strong>, then sign in or create
           an OpenRouter account and approve The Agora. The secure confirmation
@@ -89,11 +91,13 @@ export default function SupportPage() {
         not maintain a separate listener account.
       </p>
 
-      <h2>Explore without an account</h2>
+      <h2>Manage your data</h2>
       <p>
-        Choose <strong>Explore a Sample Lesson</strong> on the home screen. The
-        original offline lesson demonstrates the episode brief, full transcript,
-        answer entry, scoring feedback, supported answer, and Agora Points.
+        AI Setup includes <strong>Delete My Cloud Data</strong> to cancel
+        unfinished jobs and remove cloud records. Saved episodes on your phone
+        are unchanged. Disable <strong>Allow AI processing</strong> to stop new
+        AI requests. Previously prepared episodes can still be played without
+        processing a new episode.
       </p>
 
       <h2>Before contacting support</h2>

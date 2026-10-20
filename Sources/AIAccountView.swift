@@ -29,6 +29,8 @@ struct AIAccountView: View {
     @State private var showError = false
     @State private var showAIProcessingConsent = false
     @State private var consentForAPIKey = false
+    @State private var cloudDataMessage = ""
+    @State private var confirmCloudDeletion = false
     @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
@@ -38,6 +40,7 @@ struct AIAccountView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         progressCard
+                        privacyCard
 
                         switch stage {
                         case .connect:
@@ -48,7 +51,6 @@ struct AIAccountView: View {
                             completionCard
                         }
 
-                        privacyCard
                     }
                     .padding(16)
                 }
@@ -84,6 +86,17 @@ struct AIAccountView: View {
                     if consentForAPIKey { await connectAPIKey() }
                     else { await connectProvider() }
                 }
+            }
+            .confirmationDialog("Delete cloud data and cancel unfinished cloud jobs? Saved episodes on this phone will stay.", isPresented: $confirmCloudDeletion, titleVisibility: .visible) {
+                Button("Delete Cloud Data", role: .destructive) {
+                    Task {
+                        do {
+                            try await CloudAnalysisClient().deleteCloudData()
+                            cloudDataMessage = "Cloud data deleted. Saved episodes on this phone are unchanged."
+                        } catch { cloudDataMessage = error.localizedDescription }
+                    }
+                }
+                Button("Keep My Data", role: .cancel) {}
             }
         }
         .navigationViewStyle(.stack)
@@ -397,6 +410,15 @@ struct AIAccountView: View {
                 }
                 .font(AgoraTheme.tagFont.weight(.semibold))
                 .tint(AgoraTheme.accent)
+                if CloudAnalysisClient.isConfigured {
+                    Button("Delete My Cloud Data", role: .destructive) {
+                        confirmCloudDeletion = true
+                    }
+                    .font(AgoraTheme.tagFont)
+                    if !cloudDataMessage.isEmpty {
+                        Text(cloudDataMessage).font(AgoraTheme.tagFont).foregroundColor(AgoraTheme.inkMuted)
+                    }
+                }
             }
         }
     }

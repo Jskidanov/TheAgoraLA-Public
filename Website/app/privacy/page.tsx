@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Your information"
       title="Privacy Policy"
-      updated="Effective August 31, 2026"
+      updated="Effective October 8, 2026"
       asideTitle="The short version"
       asideText="The Agora does not sell personal information or run advertising. Cloud analysis uses an encrypted, short-lived provider credential only for the job you request."
     >
@@ -51,6 +51,13 @@ export default function PrivacyPage() {
 
       <h2>AI and service providers</h2>
       <p>
+        Before AI processing, AI Setup asks you to explicitly allow sharing
+        podcast material, typed or transcribed spoken answers, and narration
+        text with OpenRouter and its routed AI providers. Withdraw permission
+        in AI Setup to stop new AI requests. Already queued cloud jobs can be
+        cancelled or removed with Delete My Cloud Data.
+      </p>
+      <p>
         When you request cloud episode analysis, the app sends the episode title,
         public audio link or transcript, selected settings, and an encrypted
         temporary provider credential to Agora&apos;s cloud job service. The service
@@ -70,7 +77,8 @@ export default function PrivacyPage() {
         Saved episodes, transcripts, generated study material, answers, and
         Agora Points remain on your device until you replace them or delete the
         app and its data. Cloud job records, including transcripts and generated
-        study material, are automatically deleted within seven days. A
+        study material, expire seven days after job creation and are removed by
+        scheduled cleanup, even if you never collect the result. A
         pseudonymous installation identifier remains so the app can securely
         retrieve its own jobs. Disconnecting AI removes the Keychain credential.
         OpenRouter and routed model providers may retain information under their
@@ -78,6 +86,13 @@ export default function PrivacyPage() {
       </p>
 
       <h2>Security</h2>
+      <p>
+        Delete My Cloud Data in AI Setup deletes the installation record and
+        its cloud jobs, including unfinished work. Saved episodes on your phone
+        and your separate provider account are unchanged. Spoken answers use
+        Apple speech recognition and go to OpenRouter as text for grading;
+        Apple may process speech under its own privacy policy.
+      </p>
       <p>
         The app uses encrypted network connections and the iPhone Keychain for
         provider access. No system can guarantee absolute security, but we work
@@ -95,7 +110,8 @@ export default function PrivacyPage() {
       <p>
         You can decline optional microphone and speech-recognition permissions,
         use typed answers instead, disconnect your AI provider, delete saved
-        episode data, or delete the app. Provider-account privacy choices must
+        episode data, delete cloud data, withdraw AI-processing permission, or
+        delete the app. Provider-account privacy choices must
         be managed with that provider.
       </p>
 

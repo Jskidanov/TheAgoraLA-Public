@@ -93,6 +93,7 @@ final class AIAccountStore: NSObject, ObservableObject {
         allowsAIProcessing = Self.hasDataSharingConsent
         isConnected = Self.readAPIKey() != nil
         super.init()
+        Self.migrateKeychainAccessibility()
     }
 
     func connect() async throws {
@@ -200,6 +201,17 @@ final class AIAccountStore: NSObject, ObservableObject {
         AIProcessingConsent.isAllowed()
     }
 
+    private nonisolated static func migrateKeychainAccessibility() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+        ]
+        SecItemUpdate(query as CFDictionary, [
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ] as CFDictionary)
+    }
+
     nonisolated static func selectedModelID() -> String {
         let saved = UserDefaults.standard.string(forKey: powerLevelKey)
         return (AIPowerLevel(rawValue: saved ?? "") ?? .balanced).modelID
@@ -273,7 +285,7 @@ final class AIAccountStore: NSObject, ObservableObject {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
             kSecValueData as String: Data(key.utf8),
         ]
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess

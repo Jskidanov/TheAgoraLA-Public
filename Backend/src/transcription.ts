@@ -1,35 +1,54 @@
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { lookup } from "node:dns/promises";
-import { mkdtemp, open, readdir, rm, stat } from "node:fs/promises";
-import { isIP } from "node:net";
+import { mkdtemp, open, readdir, rm } from "node:fs/promises";
+import ipaddr from "ipaddr.js";
+import { Agent } from "undici";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
+import { promisify } from "node:util";
 import type { AppConfig } from "./config.js";
 import type { AgoraOpenAI } from "./openAIClient.js";
+import { parsePublishedSegments, type TimedSegment } from "./transcriptTiming.js";
 
 export async function transcribeRemoteAudio(
   audioURL: string,
   openAI: AgoraOpenAI,
   config: AppConfig,
-): Promise<string> {
+): Promise<{ transcript: string; segments: TimedSegment[]; duration: number }> {
   const directory = await mkdtemp(join(tmpdir(), "agora-audio-"));
   try {
-    const downloaded = await downloadPublicAudio(audioURL, directory, config.maxAudioBytes);
-    const fileStats = await stat(downloaded);
-    let parts = [downloaded];
-    if (fileStats.size > 24_000_000) {
-      parts = await splitAudio(downloaded, directory);
-    }
+    const downloaded = await downloadPublicAudio(audioURL, directory, config.maxAudioBytes, openAI.cancellationSignal);
+    openAI.checkCancellation();
+    const parts = await splitAudio(downloaded, directory, openAI.cancellationSignal);
     const transcriptParts = await mapConcurrent(
       parts,
       config.transcriptionConcurrency,
-      (part) => openAI.transcribe(part),
+      async (part) => {
+        openAI.checkCancellation();
+        const { stdout } = await promisify(execFile)("ffprobe", [
+          "-v", "error", "-protocol_whitelist", "file,pipe", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", part,
+        ], { timeout: 30_000, ...(openAI.cancellationSignal ? { signal: openAI.cancellationSignal } : {}) });
+        const duration = Number(stdout.trim());
+        if (!Number.isFinite(duration) || duration <= 0 || duration > 482) throw new Error("An audio part had an invalid duration.");
+        const result = await openAI.transcribeTimed(part);
+        if ((result.segments.at(-1)?.end ?? 0) < duration * 0.80
+          || result.segments.some((segment) => segment.end > duration + 2)) {
+          throw new Error("One audio part was only partially transcribed. Retry the episode; incomplete questions were not saved.");
+        }
+        return { ...result, duration };
+      },
     );
-    const transcript = transcriptParts.join(" ").replace(/\s+/g, " ").trim();
+    const transcript = transcriptParts.map((part) => part.text).join(" ").replace(/\s+/g, " ").trim();
     if (transcript.split(/\s+/).length < 120) {
       throw new Error("The audio transcription was too short to analyze reliably.");
     }
-    return transcript;
+    let duration = 0;
+    const segments = transcriptParts.flatMap((part) => {
+      const offset = duration;
+      duration += part.duration;
+      return part.segments.map((segment) => ({ ...segment, start: segment.start + offset, end: segment.end + offset }));
+    });
+    return { transcript, segments, duration };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -38,16 +57,17 @@ export async function transcribeRemoteAudio(
 export async function downloadRemoteTranscript(
   input: string,
   declaredType?: string,
-): Promise<string> {
+): Promise<{ transcript: string; segments: TimedSegment[] }> {
   const maximumBytes = 25_000_000;
   let url = new URL(input);
   for (let redirect = 0; redirect <= 3; redirect += 1) {
-    await assertPublicHTTPSURL(url);
-    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(60_000) });
+    const response = await publicFetch(url, AbortSignal.timeout(60_000));
+    try {
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) throw new Error("The transcript host returned an invalid redirect.");
       url = new URL(location, url);
+      await response.body?.cancel();
       continue;
     }
     if (!response.ok) throw new Error(`The transcript host returned HTTP ${response.status}.`);
@@ -67,7 +87,10 @@ export async function downloadRemoteTranscript(
     if (transcript.split(/\s+/).filter(Boolean).length < 120) {
       throw new Error("The published transcript was too short to analyze reliably.");
     }
-    return transcript;
+    return { transcript, segments: parsePublishedSegments(Buffer.from(data).toString("utf8")) };
+    } finally {
+      if (!response.body?.locked) await response.body?.cancel().catch(() => {});
+    }
   }
   throw new Error("The transcript URL redirected too many times.");
 }
@@ -99,15 +122,17 @@ export function normalizePublishedTranscript(data: Uint8Array, type: string): st
   return normalizeWhitespace(raw);
 }
 
-async function downloadPublicAudio(input: string, directory: string, maxBytes: number): Promise<string> {
+async function downloadPublicAudio(input: string, directory: string, maxBytes: number, signal?: AbortSignal): Promise<string> {
   let url = new URL(input);
   for (let redirect = 0; redirect <= 3; redirect += 1) {
-    await assertPublicHTTPSURL(url);
-    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(120_000) });
+    const timeout = AbortSignal.timeout(120_000);
+    const response = await publicFetch(url, signal ? AbortSignal.any([signal, timeout]) : timeout);
+    try {
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) throw new Error("The audio host returned an invalid redirect.");
       url = new URL(location, url);
+      await response.body?.cancel();
       continue;
     }
     if (!response.ok) throw new Error(`The audio host returned HTTP ${response.status}.`);
@@ -122,14 +147,17 @@ async function downloadPublicAudio(input: string, directory: string, maxBytes: n
     const path = join(directory, `episode${suffix}`);
     await streamResponseToFile(response, path, maxBytes);
     return path;
+    } finally {
+      if (!response.body?.locked) await response.body?.cancel().catch(() => {});
+    }
   }
   throw new Error("The audio URL redirected too many times.");
 }
 
 async function streamResponseToFile(response: Response, path: string, maxBytes: number): Promise<void> {
   if (!response.body) throw new Error("The audio host returned an empty response.");
-  const reader = response.body.getReader();
   const file = await open(path, "wx");
+  const reader = response.body.getReader();
   let totalBytes = 0;
   try {
     while (true) {
@@ -140,10 +168,17 @@ async function streamResponseToFile(response: Response, path: string, maxBytes: 
         await reader.cancel();
         throw new Error("This podcast audio file is larger than the server limit.");
       }
-      await file.write(value);
+      let offset = 0;
+      while (offset < value.byteLength) {
+        const { bytesWritten } = await file.write(value, offset, value.byteLength - offset);
+        if (bytesWritten === 0) throw new Error("The audio file could not be written.");
+        offset += bytesWritten;
+      }
     }
     if (totalBytes === 0) throw new Error("The audio host returned an empty response.");
   } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
     await file.close();
   }
 }
@@ -153,6 +188,7 @@ async function readResponseBytes(response: Response, maxBytes: number): Promise<
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
+  try {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -171,31 +207,55 @@ async function readResponseBytes(response: Response, maxBytes: number): Promise<
     offset += chunk.byteLength;
   }
   return result;
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
-export async function assertPublicHTTPSURL(url: URL): Promise<void> {
+export async function assertPublicHTTPSURL(url: URL) {
   if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
     throw new Error("Only public HTTPS audio URLs are supported.");
   }
-  const addresses = await lookup(url.hostname, { all: true, verbatim: true });
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const addresses = ipaddr.isValid(hostname)
+    ? [{ address: hostname, family: ipaddr.parse(hostname).kind() === "ipv4" ? 4 : 6 }]
+    : await lookup(hostname, { all: true, verbatim: true });
   if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
     throw new Error("The audio URL does not resolve to a public host.");
   }
+  return addresses;
 }
 
 export function isPrivateAddress(address: string): boolean {
-  const normalized = address.toLowerCase();
-  if (normalized.startsWith("::ffff:")) {
-    return isPrivateAddress(normalized.slice("::ffff:".length));
-  }
-  if (isIP(address) === 4) {
-    const [a = 0, b = 0] = address.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254)
-      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
-      || (a === 100 && b >= 64 && b <= 127) || a >= 224;
-  }
-  return normalized === "::1" || normalized === "::" || normalized.startsWith("fc")
-    || normalized.startsWith("fd") || normalized.startsWith("fe80:") || normalized.startsWith("ff");
+  if (!ipaddr.isValid(address)) return true;
+  return ipaddr.process(address).range() !== "unicast";
+}
+
+export async function publicFetch(url: URL, signal: AbortSignal): Promise<Response> {
+  const addresses = await assertPublicHTTPSURL(url);
+  const address = addresses[0]!;
+  // Pin the validated DNS result for this connection, including after every redirect.
+  const dispatcher = new Agent({ connect: { lookup: (_hostname, options, callback) => {
+    if (options.all) callback(null, [address]);
+    else callback(null, address.address, address.family);
+  } } });
+  try {
+    const response = await fetch(url, { redirect: "manual", signal, dispatcher } as RequestInit & { dispatcher: Agent });
+    if (!response.body) { await dispatcher.close(); return response; }
+    const reader = response.body.getReader();
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const item = await reader.read();
+          if (item.done) { controller.close(); await dispatcher.close(); }
+          else controller.enqueue(item.value);
+        } catch (error) { controller.error(error); await dispatcher.destroy(); }
+      },
+      async cancel() { await reader.cancel(); await dispatcher.destroy(); },
+    });
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } catch (error) { await dispatcher.destroy(); throw error; }
 }
 
 function safeExtension(path: string): string {
@@ -203,12 +263,12 @@ function safeExtension(path: string): string {
   return [".mp3", ".m4a", ".mp4", ".aac", ".wav", ".flac", ".ogg", ".webm"].includes(value) ? value : ".mp3";
 }
 
-async function splitAudio(input: string, directory: string): Promise<string[]> {
+async function splitAudio(input: string, directory: string, signal?: AbortSignal): Promise<string[]> {
   const outputPattern = join(directory, "segment-%03d.m4a");
   await runProcess("ffmpeg", [
-    "-hide_banner", "-loglevel", "error", "-i", input,
-    "-f", "segment", "-segment_time", "480", "-vn", "-c:a", "aac", "-b:a", "64k", outputPattern,
-  ]);
+    "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-i", input,
+    "-f", "segment", "-segment_time", "480", "-reset_timestamps", "1", "-vn", "-c:a", "aac", "-b:a", "64k", outputPattern,
+  ], signal);
   const parts = (await readdir(directory))
     .filter((name) => name.startsWith("segment-") && name.endsWith(".m4a"))
     .sort()
@@ -217,11 +277,12 @@ async function splitAudio(input: string, directory: string): Promise<string[]> {
   return parts;
 }
 
-function runProcess(command: string, args: string[]): Promise<void> {
+function runProcess(command: string, args: string[], signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const timeout = AbortSignal.timeout(300_000);
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
     let errorOutput = "";
-    child.stderr.on("data", (chunk) => { errorOutput += String(chunk).slice(0, 2_000); });
+    child.stderr.on("data", (chunk) => { errorOutput = (errorOutput + String(chunk)).slice(-2_000); });
     child.on("error", reject);
     child.on("close", (code) => code === 0 ? resolve() : reject(new Error(errorOutput || `${command} exited with ${code}.`)));
   });

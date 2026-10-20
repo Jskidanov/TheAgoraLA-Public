@@ -588,8 +588,7 @@ final class OpenRouterClient: @unchecked Sendable {
         do {
             durationTime = try await asset.load(.duration)
         } catch {
-            progress("Transcribing the episode audio...")
-            return try await transcribeUnsegmentedFile(at: staged.url)
+            throw OpenRouterClientError.service("The audio duration could not be verified. Retry this episode so Agora can check that the whole podcast is analyzed.")
         }
         let duration = durationTime.seconds
         guard duration.isFinite, duration > 0, duration <= 86_400 else {
@@ -639,7 +638,14 @@ final class OpenRouterClient: @unchecked Sendable {
                         .appendingPathComponent("agora-segment-\(UUID().uuidString).m4a")
                     defer { try? FileManager.default.removeItem(at: outputURL) }
                     try await exportSegment(asset: asset, start: start, duration: length, outputURL: outputURL)
-                    return (index, try await transcribeFile(at: outputURL, format: "m4a"))
+                    let text = try await transcribeFile(at: outputURL, format: "m4a")
+                    let local = TranscriptTiming.segments(in: text)
+                    guard let last = local.last, last.end >= length * 0.80,
+                          local.allSatisfy({ $0.end <= length + 2 }) else {
+                        throw OpenRouterClientError.service("One audio part was only partially transcribed. Retry the episode; incomplete questions were not saved.")
+                    }
+                    let absolute = local.map { TimedTranscriptSegment(start: $0.start + start, end: $0.end + start, text: $0.text) }
+                    return (index, TranscriptTiming.annotate(absolute))
                 }
             }
 
@@ -779,6 +785,7 @@ final class OpenRouterClient: @unchecked Sendable {
     }
 
     private func annotatedTranscript(_ transcript: String, duration: Double) -> String {
+        if !TranscriptTiming.segments(in: transcript).isEmpty { return transcript }
         let words = transcript.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
         guard !words.isEmpty else { return transcript }
         let wordsPerSegment = 90
@@ -796,6 +803,27 @@ final class OpenRouterClient: @unchecked Sendable {
     }
 
     private func transcriptChunks(_ transcript: String, duration: Double) -> [String] {
+        let timed = TranscriptTiming.segments(in: transcript)
+        if !timed.isEmpty {
+            let regionCount = PodcastPromptPolicy.minimumCount(for: duration)
+            var groups: [[TimedTranscriptSegment]] = []
+            var group: [TimedTranscriptSegment] = []
+            var currentRegion = 0
+            var words = 0
+            for segment in timed {
+                let region = min(regionCount - 1, Int(segment.start / max(duration, 1) * Double(regionCount)))
+                if !group.isEmpty, region != currentRegion || words > 2800 {
+                    groups.append(group)
+                    group = Array(group.suffix(2))
+                    words = group.reduce(0) { $0 + $1.text.split(whereSeparator: { $0.isWhitespace }).count }
+                }
+                currentRegion = region
+                group.append(segment)
+                words += segment.text.split(whereSeparator: { $0.isWhitespace }).count
+            }
+            if !group.isEmpty { groups.append(group) }
+            return groups.map(TranscriptTiming.annotate)
+        }
         let words = transcript.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
         guard !words.isEmpty else { return [] }
         let targetSections = duration >= 1_800
@@ -845,7 +873,7 @@ final class OpenRouterClient: @unchecked Sendable {
     }
 
     private func normalizedEvidenceText(_ value: String) -> String {
-        value.lowercased()
+        TranscriptTiming.plainText(value).lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -923,18 +951,12 @@ final class OpenRouterClient: @unchecked Sendable {
         }
     }
 
-    private func transcribeUnsegmentedFile(at url: URL) async throws -> TranscriptionResult {
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
-        guard size > 0, size <= 24_000_000 else { throw OpenRouterClientError.audioTooLarge }
-        let text = try await transcribeFile(at: url, format: normalizedAudioFormat(url.pathExtension))
-        return TranscriptionResult(transcript: text, duration: nil)
-    }
-
     private func transcribeFile(at url: URL, format: String) async throws -> String {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let payload: [String: Any] = [
             "model": "openai/whisper-large-v3",
+            "response_format": "verbose_json",
+            "timestamp_granularities": ["segment"],
             "input_audio": ["data": data.base64EncodedString(), "format": format],
         ]
         var request = URLRequest(url: transcriptionURL)
@@ -950,7 +972,17 @@ final class OpenRouterClient: @unchecked Sendable {
               let text = object["text"] as? String else {
             throw OpenRouterClientError.invalidResponse
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let items = object["segments"] as? [[String: Any]], !items.isEmpty else {
+            throw OpenRouterClientError.service("The provider returned text without audio timestamps. Retry the episode to generate correctly timed questions.")
+        }
+        let segments = items.compactMap { item -> TimedTranscriptSegment? in
+            guard let start = item["start"] as? Double, let end = item["end"] as? Double,
+                  let words = item["text"] as? String, start.isFinite, end.isFinite, start >= 0, end > start,
+                  !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return TimedTranscriptSegment(start: start, end: end, text: words)
+        }
+        guard segments.count == items.count, !text.isEmpty else { throw OpenRouterClientError.invalidResponse }
+        return TranscriptTiming.annotate(segments)
     }
 
     private func apiKey() throws -> String {

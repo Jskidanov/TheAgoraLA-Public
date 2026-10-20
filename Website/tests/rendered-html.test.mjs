@@ -1,25 +1,30 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { before, after } from "node:test";
+import { fileURLToPath } from "node:url";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+
+let runtime;
+before(async () => {
+  process.env.MINIFLARE_REGISTRY_PATH = ".wrangler/registry";
+  const { Miniflare, convertV4MiniflareOptions } = await import("miniflare");
+  const root = fileURLToPath(new URL("../dist/server", import.meta.url));
+  const paths = (await readdir(root, { recursive: true })).filter((path) => /\.(m?js)$/.test(path) && path !== "index.js");
+  runtime = new Miniflare(convertV4MiniflareOptions({
+    modulesRoot: root,
+    modules: ["index.js", ...paths].map((path) => ({ type: "ESModule", path: join(root, path) })),
+    compatibilityDate: "2026-10-08",
+    compatibilityFlags: ["nodejs_compat"],
+    assets: {
+      directory: fileURLToPath(new URL("../dist/client", import.meta.url)), binding: "ASSETS",
+      run_worker_first: true, routerConfig: { has_user_worker: true },
+    },
+  }));
+});
+after(async () => { await runtime?.dispose(); });
 
 async function render(path = "/") {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${path}`);
-  const { default: worker } = await import(workerUrl.href);
-
-  return worker.fetch(
-    new Request(`http://localhost${path}`, {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
-  );
+  return runtime.dispatchFetch(`http://localhost${path}`, { headers: { accept: "text/html" } });
 }
 
 test("server-renders the production home page", async () => {

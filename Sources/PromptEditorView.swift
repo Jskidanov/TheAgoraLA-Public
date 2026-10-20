@@ -217,6 +217,17 @@ struct PromptEditorView: View {
                             Spacer()
                             Button("Cancel") {
                                 importTask?.cancel()
+                                if let pending = CloudAnalysisClient.pendingAnalysis,
+                                   pending.expectedAudioURL == episodeStore.episode.audioURL {
+                                    Task {
+                                        do {
+                                            try await CloudAnalysisClient().cancel(jobID: pending.jobID)
+                                            importStatusText = "Cloud analysis cancelled."
+                                        } catch {
+                                            importStatusText = "Stopped waiting, but the cloud job may still be running. Reopen this page to reconnect and cancel it."
+                                        }
+                                    }
+                                }
                             }
                             .buttonStyle(AgoraOutlineButtonStyle())
                         }
@@ -562,7 +573,10 @@ struct PromptEditorView: View {
     @ViewBuilder
     private var transcriptEditor: some View {
         if transcriptExpanded {
-            TextEditor(text: $transcriptText)
+            TextEditor(text: Binding(
+                get: { TranscriptTiming.plainText(transcriptText) },
+                set: { transcriptText = $0 }
+            ))
                 .scrollContentBackground(.hidden)
                 .foregroundColor(AgoraTheme.ink)
                 .background(Color.clear)
@@ -586,7 +600,7 @@ struct PromptEditorView: View {
                         .font(AgoraTheme.tagFont)
                         .foregroundColor(AgoraTheme.inkMuted)
                 } else {
-                    Text(transcriptText)
+                    Text(TranscriptTiming.plainText(transcriptText))
                         .font(AgoraTheme.bodyFont)
                         .foregroundColor(AgoraTheme.ink)
                         .lineLimit(4)
@@ -813,6 +827,10 @@ struct PromptEditorView: View {
             selectedPromptCount = analysis.recommendedPromptCount
             importStatusText = "Episode brief, full transcript, and \(analysis.prompts.count) prompts are ready."
         } catch {
+            if CloudAnalysisClient.pendingAnalysis != nil, !operationWasCancelled(error) {
+                importStatusText = "Your cloud analysis is still saved. Reopen this page to reconnect; no duplicate AI run has been started."
+                return
+            }
             if !operationWasCancelled(error), shouldFallBackToDirectAnalysis(error) {
                 importStatusText = "Cloud analysis is unavailable. Continuing through your connected AI; keep Agora open for this run."
                 await prepareCompleteEpisode(imported, preferredTranscript: preferredTranscript)
@@ -1272,7 +1290,8 @@ private struct PromptRow: View {
             timestampSeconds: min(max(timestampSeconds, 1), max(episodeDuration, 60)),
             question: question.trimmingCharacters(in: .whitespacesAndNewlines),
             expectedAnswer: expectedAnswer.trimmingCharacters(in: .whitespacesAndNewlines),
-            leadTimeSeconds: leadTimeSeconds
+            leadTimeSeconds: leadTimeSeconds,
+            timingVerified: prompt.timingVerified
         )
         onUpdate(updated)
     }

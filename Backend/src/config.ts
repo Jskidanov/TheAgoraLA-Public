@@ -28,7 +28,7 @@ const environmentSchema = z.object({
   OPENAI_EXTRACTION_MODEL: z.string().default("openai/gpt-5.6-terra"),
   OPENAI_CURATION_MODEL: z.string().default("openai/gpt-6-astra"),
   OPENAI_SCORING_MODEL: z.string().default("openai/gpt-5.6-terra"),
-  OPENAI_TRANSCRIPTION_MODEL: z.string().default("openai/gpt-4o-mini-transcribe"),
+  OPENAI_TRANSCRIPTION_MODEL: z.string().default("openai/whisper-large-v3"),
   CREDIT_PRODUCT_GRANTS: z.string().default(
     "com.theagora.la.credits.5:5,com.theagora.la.credits.20:22,com.theagora.la.credits.50:60",
   ),

@@ -8,6 +8,7 @@ import {
 
 const evidence = "The host argues that attention is a form of respect because it allows another person's reasoning to change your mind.";
 const transcript = `${evidence} Later, the guest distinguishes passive hearing from active listening by requiring the listener to reconstruct the argument before responding.`;
+const timed = [{ start: 30, end: 50, text: evidence }];
 
 function prompt(overrides: Partial<EpisodePrompt> = {}): EpisodePrompt {
   return {
@@ -28,8 +29,18 @@ function prompt(overrides: Partial<EpisodePrompt> = {}): EpisodePrompt {
 }
 
 describe("prompt quality gates", () => {
+  it("ignores invented early times and waits for real supporting audio", () => {
+    const [result] = validateAndRankPrompts([prompt({ evidence: [{ quote: evidence, start_seconds: 0, end_seconds: 36 }] })], transcript, 3600,
+      [{ start: 2100, end: 2140, text: evidence }]);
+    expect(result?.time).toBe(2143);
+    expect(result?.timing_verified).toBe(true);
+  });
+
+  it("never invents timing for an untimed transcript", () => {
+    expect(validateAndRankPrompts([prompt()], transcript, 120, [])).toHaveLength(0);
+  });
   it("waits until the supporting passage ends, even when it starts at zero", () => {
-    const [result] = validateAndRankPrompts([prompt()], transcript, 120);
+    const [result] = validateAndRankPrompts([prompt()], transcript, 120, timed);
     expect(result!.time).toBe(53);
   });
 
@@ -37,36 +48,36 @@ describe("prompt quality gates", () => {
     const repeatedTranscript = `${evidence} Some unrelated discussion. ${evidence}`;
     const [result] = validateAndRankPrompts([
       prompt({ evidence: [{ quote: evidence, start_seconds: 88, end_seconds: 104 }] }),
-    ], repeatedTranscript, 120);
+    ], repeatedTranscript, 120, [...timed, { start: 88, end: 104, text: evidence }]);
     expect(result!.time).toBe(107);
   });
 
   it("rejects a fabricated second passage even when the first is real", () => {
     const candidate = prompt();
     candidate.evidence.push({ quote: "Fabricated evidence about respect that never appeared in this episode at all.", start_seconds: 50, end_seconds: 60 });
-    expect(validateAndRankPrompts([candidate], transcript, 120)).toHaveLength(0);
+    expect(validateAndRankPrompts([candidate], transcript, 120, timed)).toHaveLength(0);
   });
 
   it("keeps an episode-specific question with exact transcript evidence", () => {
-    expect(validateAndRankPrompts([prompt()], transcript, 120)).toHaveLength(1);
+    expect(validateAndRankPrompts([prompt()], transcript, 120, timed)).toHaveLength(1);
   });
 
   it("rejects stock questions even when the model marks them as passing", () => {
-    const result = validateAndRankPrompts([prompt({ question: "What is the main idea of this episode?" })], transcript, 120);
+    const result = validateAndRankPrompts([prompt({ question: "What is the main idea of this episode?" })], transcript, 120, timed);
     expect(result).toHaveLength(0);
   });
 
   it("rejects evidence that does not occur in the transcript", () => {
     const result = validateAndRankPrompts([
       prompt({ evidence: [{ quote: "A fabricated quote that does not occur anywhere in the supplied podcast transcript.", start_seconds: 30, end_seconds: 50 }] }),
-    ], transcript, 120);
+    ], transcript, 120, timed);
     expect(result).toHaveLength(0);
   });
 
   it("rejects an expected answer that is unrelated to the evidence", () => {
     const result = validateAndRankPrompts([
       prompt({ expected_answer: "The episode recommends buying specialized running shoes before beginning marathon training." }),
-    ], transcript, 120);
+    ], transcript, 120, timed);
     expect(result).toHaveLength(0);
   });
 });

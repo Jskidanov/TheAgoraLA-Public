@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isPrivateAddress, normalizePublishedTranscript } from "../src/transcription.js";
+import { parsePublishedSegments, evidenceEnd } from "../src/transcriptTiming.js";
 
 describe("cloud audio network safety", () => {
   it("blocks private IPv4 and IPv4-mapped IPv6 destinations", () => {
@@ -9,6 +10,9 @@ describe("cloud audio network safety", () => {
     expect(isPrivateAddress("::ffff:127.0.0.1")).toBe(true);
     expect(isPrivateAddress("::ffff:10.2.3.4")).toBe(true);
     expect(isPrivateAddress("::ffff:192.168.1.20")).toBe(true);
+    expect(isPrivateAddress("::ffff:7f00:1")).toBe(true);
+    expect(isPrivateAddress("fe90::1")).toBe(true);
+    expect(isPrivateAddress("2001:db8::1")).toBe(true);
   });
 
   it("allows ordinary public addresses", () => {
@@ -25,6 +29,11 @@ describe("cloud audio network safety", () => {
 });
 
 describe("published transcript normalization", () => {
+  it("retains caption times for evidence spanning multiple cues", () => {
+    const segments = parsePublishedSegments("WEBVTT\n\n1\n00:35:00.000 --> 00:35:03.000\nAttention lets another person's reasoning\n\n2\n00:35:03.000 --> 00:35:07.000\nchange your view of the argument.\n");
+    expect(segments).toHaveLength(2);
+    expect(evidenceEnd("Attention lets another person's reasoning change your view of the argument", segments)).toBe(2107);
+  });
   it("preserves ordered speech from JSON transcript segments", () => {
     const data = Buffer.from(JSON.stringify({
       segments: [

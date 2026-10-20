@@ -8,11 +8,20 @@ final class EpisodeStore: ObservableObject {
     @Published var saveError: String?
     private static let storageQueue = DispatchQueue(label: "Agora.episodeStorage", qos: .utility)
     private var saveRevision = 0
+    private let storageDirectory: URL?
+
+    private var currentStorageURL: URL? {
+        storageDirectory?.appendingPathComponent("episode.json") ?? Self.storageURL
+    }
+    private var currentLibraryURL: URL? {
+        storageDirectory?.appendingPathComponent("episode-library.json") ?? Self.libraryStorageURL
+    }
 
     private let storageKey = "TheAgoraLA.Episode.Data"
     private static let retiredDemoID = UUID(uuidString: "A60DD4CF-8B21-4A03-9D36-E43EC6C351AE")!
-    private var libraryLoadTask: Task<[Episode], Never>?
+    private var libraryLoadTask: Task<Result<[Episode], Error>, Never>?
     private var promptPersistenceTask: Task<Void, Never>?
+    private var deferredLibraryEpisodes: [Episode] = []
 
     private static var storageURL: URL? {
         guard let applicationSupport = FileManager.default.urls(
@@ -30,13 +39,14 @@ final class EpisodeStore: ObservableObject {
         storageURL?.deletingLastPathComponent().appendingPathComponent("episode-library.json")
     }
 
-    init() {
+    init(storageDirectory: URL? = nil) {
+        self.storageDirectory = storageDirectory
         let loadedEpisode: Episode
-        if let url = Self.storageURL,
+        if let url = storageDirectory?.appendingPathComponent("episode.json") ?? Self.storageURL,
            let data = try? Data(contentsOf: url),
            let saved = try? JSONDecoder().decode(Episode.self, from: data) {
             loadedEpisode = saved
-        } else if let data = UserDefaults.standard.data(forKey: storageKey),
+        } else if storageDirectory == nil, let data = UserDefaults.standard.data(forKey: storageKey),
            let saved = try? JSONDecoder().decode(Episode.self, from: data) {
             loadedEpisode = saved
             UserDefaults.standard.removeObject(forKey: storageKey)
@@ -50,32 +60,37 @@ final class EpisodeStore: ObservableObject {
         if episode.id == Self.retiredDemoID {
             episode = MockEpisodeProvider.sample
         }
+        syncActiveEpisodeIntoLibrary()
     }
 
     func loadLibraryIfNeeded() async {
         guard !isLibraryLoaded else { return }
 
-        let task: Task<[Episode], Never>
+        let task: Task<Result<[Episode], Error>, Never>
         if let libraryLoadTask {
             task = libraryLoadTask
         } else {
-            let url = Self.libraryStorageURL
+            let url = currentLibraryURL
             task = Task.detached(priority: .userInitiated) {
-                guard let url,
-                      let data = try? Data(contentsOf: url),
-                      let episodes = try? JSONDecoder().decode([Episode].self, from: data) else {
-                    return []
-                }
-                return episodes
+                guard let url else { return .failure(CloudAnalysisError.service("Episode storage is unavailable.")) }
+                guard FileManager.default.fileExists(atPath: url.path) else { return .success([]) }
+                do { return .success(try JSONDecoder().decode([Episode].self, from: Data(contentsOf: url))) }
+                catch { return .failure(error) }
             }
             libraryLoadTask = task
         }
 
-        let loadedEpisodes = await task.value
+        let result = await task.value
         guard !isLibraryLoaded else { return }
+        libraryLoadTask = nil
+        guard case .success(let loadedEpisodes) = result else {
+            saveError = "The saved episode library could not be read. Its original file has been preserved; contact support before resetting the app."
+            return
+        }
         savedEpisodes = loadedEpisodes
         isLibraryLoaded = true
-        libraryLoadTask = nil
+        for saved in deferredLibraryEpisodes.reversed() { upsertSavedEpisode(saved) }
+        deferredLibraryEpisodes.removeAll()
         syncActiveEpisodeIntoLibrary()
     }
 
@@ -236,6 +251,7 @@ final class EpisodeStore: ObservableObject {
         durationSeconds: Double?,
         artworkURL: URL? = nil
     ) {
+        syncActiveEpisodeIntoLibrary()
         let sourceChanged = !matchesResolvedEpisode(
             audioURL: audioURL,
             feedURL: feedURL,
@@ -375,7 +391,12 @@ final class EpisodeStore: ObservableObject {
     }
 
     private func syncActiveEpisodeIntoLibrary() {
-        guard isLibraryLoaded, !episode.audioURL.isFileURL else { return }
+        guard !episode.audioURL.isFileURL else { return }
+        guard isLibraryLoaded else {
+            deferredLibraryEpisodes.removeAll { $0.id == episode.id }
+            deferredLibraryEpisodes.insert(episode, at: 0)
+            return
+        }
         upsertSavedEpisode(episode)
     }
 
@@ -408,20 +429,30 @@ final class EpisodeStore: ObservableObject {
         let revision = saveRevision
         let current = episode
         let library = isLibraryLoaded ? savedEpisodes : nil
-        let currentURL = Self.storageURL
-        let libraryURL = Self.libraryStorageURL
+        let deferred = deferredLibraryEpisodes
+        let currentURL = currentStorageURL
+        let libraryURL = currentLibraryURL
         Self.storageQueue.async {
             let result = Result<Void, Error> {
                 guard let currentURL else {
                     throw CloudAnalysisError.service("Episode storage is unavailable.")
                 }
+                try FileManager.default.createDirectory(at: currentURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try JSONEncoder().encode(current).write(to: currentURL, options: .atomic)
-                if let library {
-                    guard let libraryURL else {
-                        throw CloudAnalysisError.service("Library storage is unavailable.")
-                    }
-                    try JSONEncoder().encode(library).write(to: libraryURL, options: .atomic)
+                guard let libraryURL else {
+                    throw CloudAnalysisError.service("Library storage is unavailable.")
                 }
+                var savedLibrary = library ?? []
+                if library == nil {
+                    if FileManager.default.fileExists(atPath: libraryURL.path) {
+                        savedLibrary = try JSONDecoder().decode([Episode].self, from: Data(contentsOf: libraryURL))
+                    }
+                    for saved in deferred.reversed() {
+                        savedLibrary.removeAll { $0.id == saved.id }
+                        savedLibrary.insert(saved, at: 0)
+                    }
+                }
+                try JSONEncoder().encode(savedLibrary).write(to: libraryURL, options: .atomic)
             }
             Task { @MainActor [weak self] in
                 if let self, self.saveRevision == revision {

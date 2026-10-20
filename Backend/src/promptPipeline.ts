@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config.js";
 import type { AgoraOpenAI } from "./openAIClient.js";
+import { annotatedTranscript, evidenceEnd, type TimedSegment } from "./transcriptTiming.js";
 
 export interface TranscriptEvidence {
   quote: string;
@@ -8,6 +9,7 @@ export interface TranscriptEvidence {
 }
 
 export interface EpisodePrompt {
+  timing_verified?: boolean;
   time: number;
   question: string;
   expected_answer: string;
@@ -137,6 +139,7 @@ function curationSchema(candidateCount: number, automaticMinimum: number) {
 
 export async function analyzeTranscript(options: {
   transcript: string;
+  segments: TimedSegment[];
   duration: number;
   desiredCount?: number;
   safetyID: string;
@@ -146,7 +149,7 @@ export async function analyzeTranscript(options: {
   const normalizedTranscript = normalizeWhitespace(options.transcript);
   const automaticMinimum = minimumPromptCountForDuration(options.duration);
   const requiredCount = options.desiredCount ?? automaticMinimum;
-  const chunks = transcriptChunks(normalizedTranscript, options.duration);
+  const chunks = timedTranscriptChunks(options.segments, options.duration);
   const extractedBatches = await mapConcurrent(chunks, options.config.analysisConcurrency, async (chunk, index) => {
     const response = await options.openAI.structured<{ ideas: ExtractedIdea[] }>({
       model: options.config.models.extraction,
@@ -160,7 +163,7 @@ export async function analyzeTranscript(options: {
         "Every expected answer must directly state what the podcast says, and every evidence quote must be copied verbatim from the supplied section.",
         "Ignore advertisements, introductions, biographies, housekeeping, jokes without argumentative value, and facts answerable from general knowledge.",
       ].join(" "),
-      input: `Section ${index + 1} of ${chunks.length}. Preserve the supplied approximate timestamps.\n\n${chunk}`,
+      input: `Section ${index + 1} of ${chunks.length}. Use the supplied verified audio timestamps.\n\n${chunk}`,
     });
     return response.ideas;
   });
@@ -209,7 +212,7 @@ export async function analyzeTranscript(options: {
     input: `Episode duration: ${Math.round(options.duration)} seconds.\nFinal prompt count: ${options.desiredCount == null ? `Choose automatically from the episode's learning density, with at least ${automaticMinimum} for this duration.` : `Use the listener's manual choice of ${options.desiredCount}.`}\n\nEVIDENCE-BACKED IDEAS FROM THE COMPLETE EPISODE:\n${JSON.stringify(ideas)}`,
   });
 
-  const validated = validateAndRankPrompts(curated.prompts, normalizedTranscript, options.duration);
+  const validated = validateAndRankPrompts(curated.prompts, normalizedTranscript, options.duration, options.segments);
   const requestedCount = options.desiredCount ?? Math.max(
     automaticMinimum,
     Math.min(12, curated.recommended_prompt_count),
@@ -232,6 +235,7 @@ export function validateAndRankPrompts(
   prompts: EpisodePrompt[],
   transcript: string,
   duration: number,
+  segments: TimedSegment[],
 ): EpisodePrompt[] {
   const transcriptKey = normalizedText(transcript);
   return prompts
@@ -246,10 +250,12 @@ export function validateAndRankPrompts(
     }))
     .map((prompt) => ({
       ...prompt,
-      time: evidenceTimestamp(prompt, transcriptKey, duration),
+      time: Math.min(duration, Math.max(...prompt.evidence.map((item) => evidenceEnd(item.quote, segments) ?? NaN)) + 3),
+      timing_verified: true,
       question: ensureQuestion(normalizeWhitespace(prompt.question)),
       expected_answer: normalizeWhitespace(prompt.expected_answer),
     }))
+    .filter((prompt) => Number.isFinite(prompt.time) && prompt.time > 0)
     .filter((prompt) => answerAlignment(prompt) >= 0.22)
     .filter((prompt) => questionEvidenceAlignment(prompt) >= 0.25)
     .filter((prompt) => intersectionSize(tokens(prompt.question), tokens(prompt.expected_answer)) >= 1)
@@ -359,21 +365,24 @@ function minimumTimeDistance(prompt: EpisodePrompt, selected: EpisodePrompt[]): 
   return Math.min(...selected.map((existing) => Math.abs(existing.time - prompt.time)));
 }
 
-function transcriptChunks(transcript: string, duration: number): string[] {
-  const words = transcript.split(/\s+/).filter(Boolean);
-  const overlap = 180;
-  const targetSections = duration >= 1_800
-    ? minimumPromptCountForDuration(duration)
-    : Math.max(2, Math.min(4, minimumPromptCountForDuration(duration)));
-  const chunkSize = Math.max(700, Math.min(3_200, Math.ceil(words.length / targetSections) + overlap));
+function timedTranscriptChunks(segments: TimedSegment[], duration: number): string[] {
+  const sections = minimumPromptCountForDuration(duration);
   const chunks: string[] = [];
-  for (let start = 0; start < words.length; start += chunkSize - overlap) {
-    const end = Math.min(words.length, start + chunkSize);
-    const startSeconds = Math.round(duration * start / Math.max(words.length, 1));
-    const endSeconds = Math.round(duration * end / Math.max(words.length, 1));
-    chunks.push(`[[APPROX_SECONDS ${startSeconds}-${endSeconds}]]\n${words.slice(start, end).join(" ")}`);
-    if (end === words.length) break;
+  let current: TimedSegment[] = [];
+  let region = 0;
+  let words = 0;
+  for (const segment of segments) {
+    const nextRegion = Math.min(sections - 1, Math.floor(segment.start / duration * sections));
+    if (current.length && (nextRegion !== region || words > 2800)) {
+      chunks.push(annotatedTranscript(current));
+      current = current.slice(-2);
+      words = current.reduce((sum, item) => sum + wordCount(item.text), 0);
+    }
+    region = nextRegion;
+    current.push(segment);
+    words += wordCount(segment.text);
   }
+  if (current.length) chunks.push(annotatedTranscript(current));
   return chunks;
 }
 
@@ -412,28 +421,6 @@ function questionEvidenceAlignment(prompt: EpisodePrompt): number {
   const questionTokens = tokens(prompt.question);
   if (questionTokens.size === 0) return 0;
   return intersectionSize(evidenceTokens, questionTokens) / Math.min(questionTokens.size, 6);
-}
-
-function evidenceTimestamp(prompt: EpisodePrompt, normalizedTranscript: string, duration: number): number {
-  const suppliedEnd = Math.max(0, ...prompt.evidence.map((item) => (
-    Number.isFinite(item.end_seconds) && item.end_seconds >= 0 && item.end_seconds <= duration
-      ? item.end_seconds
-      : 0
-  )));
-  if (suppliedEnd > 0) {
-    return Math.min(Math.max(suppliedEnd + 3, 1), Math.max(duration, 1));
-  }
-
-  let latestEnd = 0;
-  for (const item of prompt.evidence) {
-    const quote = normalizedText(item.quote);
-    const index = normalizedTranscript.indexOf(quote);
-    if (index >= 0) {
-      latestEnd = Math.max(latestEnd, duration * (index + quote.length) / Math.max(normalizedTranscript.length, 1));
-    }
-  }
-  // Text-only transcripts provide approximate timing; wait until all supporting passages have ended.
-  return Math.min(Math.max(latestEnd + 3, 1), Math.max(duration, 1));
 }
 
 function isStockQuestion(question: string): boolean {

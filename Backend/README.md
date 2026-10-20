@@ -14,7 +14,13 @@ This service runs long podcast transcription and prompt generation outside the i
 
 - Each request uses the listener's OpenRouter credential. The Agora does not provide or pay for AI usage.
 - Credentials are encrypted with AES-256-GCM before entering PostgreSQL, decrypted only in worker memory, and erased when a job completes or fails.
-- Completed and failed cloud-job records, including transcripts and generated study material, are automatically deleted after `JOB_RETENTION_DAYS` (seven days by default).
+- All cloud-job records expire after `JOB_RETENTION_DAYS` from creation (seven days by default), regardless of acknowledgement. Cleanup runs at startup and every minute. Provider credentials are also removed on completion, failure or cancellation.
+
+## Verified Audio Timing
+
+Analysis preserves publisher caption timestamps when the full timeline is present. Otherwise the worker transcribes every eight-minute audio part using timestamp-capable Whisper, verifies each part against its measured audio duration, and offsets timestamps onto the full episode timeline. Questions are scheduled after their actual supporting passages; model-supplied timestamps are not trusted. Incomplete or untimed results fail clearly rather than becoming ready episodes. The extraction and final editorial-review models remain unchanged.
+
+Older deployments configured with a JSON-only transcription model automatically use `openai/whisper-large-v3` for timed analysis. Set `OPENAI_TRANSCRIPTION_MODEL` to a compatible Whisper model; `/health` now also checks database connectivity.
 - The API never returns provider credentials and Fastify request-body logging is not enabled.
 - Anonymous installation sessions avoid requiring an Agora account or Sign in with Apple.
 

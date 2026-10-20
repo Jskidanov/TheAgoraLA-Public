@@ -2,6 +2,10 @@
 
 Audit date: August 9, 2026
 
+Historical record only. The current release audit and remaining submission
+requirements are in `release-audit-2026-10-08.md`. Later builds changed voice,
+credential protection, review access and cloud retention behavior.
+
 ## Automated Verification Completed
 
 - Clean Release simulator build and Apple product validation passed.

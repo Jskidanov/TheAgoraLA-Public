@@ -49,7 +49,9 @@ export function startAnalysisWorker(database: Database, config: AppConfig) {
   const retentionTimer = setInterval(() => {
     void deleteExpiredJobs(database, config.jobRetentionDays)
       .catch((error) => console.error("Expired job cleanup failed", error));
-  }, 3_600_000);
+  }, 60_000);
+  void deleteExpiredJobs(database, config.jobRetentionDays)
+    .catch((error) => console.error("Initial expired job cleanup failed", error));
   void requeueStaleJobs(database).then(runTick).catch((error) => {
     console.error("Could not recover stale analysis jobs", error);
     runTick();
@@ -100,8 +102,7 @@ async function processClaimedJob(database: Database, config: AppConfig, job: Cla
 export async function deleteExpiredJobs(database: Database, retentionDays: number): Promise<void> {
   await database.query(
     `DELETE FROM analysis_jobs
-     WHERE (status = 'failed' AND completed_at < NOW() - make_interval(days => $1))
-        OR (status = 'complete' AND acknowledged_at < NOW() - make_interval(days => $1))`,
+     WHERE created_at < NOW() - make_interval(days => $1)`,
     [retentionDays],
   );
 }

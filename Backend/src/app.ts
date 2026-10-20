@@ -50,7 +50,7 @@ const scoreSchema = z.object({
 });
 
 const publicDirectory = new URL("../public/", import.meta.url);
-const analysisPipelineVersion = "2026-09-25.1";
+const analysisPipelineVersion = "2026-10-08.verified-timing";
 
 interface AnalysisJobRow {
   id: string;
@@ -72,7 +72,14 @@ export function buildApp(options: { config: AppConfig; database: Database }) {
     return payload;
   });
 
-  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health", async (_request, reply) => {
+    try {
+      await database.query("SELECT 1");
+      return { status: "ok", database: "available" };
+    } catch {
+      return reply.code(503).send({ status: "unavailable", database: "unavailable" });
+    }
+  });
 
   app.get("/privacy", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(await readFile(new URL("privacy.html", publicDirectory), "utf8"));

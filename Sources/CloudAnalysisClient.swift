@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 enum CloudAnalysisError: LocalizedError {
     case notConfigured
@@ -41,6 +42,7 @@ struct CloudAnalysisClient {
     private static let installationKey = "TheAgoraLA.Cloud.InstallationID"
     private static let sessionKey = "TheAgoraLA.Cloud.SessionToken"
     private static let pendingKey = "TheAgoraLA.Cloud.PendingAnalysis"
+    private static let acknowledgementsKey = "TheAgoraLA.Cloud.PendingAcknowledgements"
     private static let networkSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = true
@@ -126,7 +128,8 @@ struct CloudAnalysisClient {
         }
         if let transcript, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             body["transcript"] = transcript
-        } else if let transcriptSource {
+        }
+        if let transcriptSource {
             body["transcript_url"] = transcriptSource.url.absoluteString
             if let type = transcriptSource.type, !type.isEmpty {
                 body["transcript_type"] = type
@@ -161,6 +164,14 @@ struct CloudAnalysisClient {
 
     func cancel(jobID: UUID) async throws {
         _ = try await authorizedRequest(path: "v1/episode-jobs/\(jobID.uuidString)/cancel", method: "POST")
+        if Self.pendingAnalysis?.jobID == jobID { Self.clearPending() }
+    }
+
+    func deleteCloudData() async throws {
+        _ = try await authorizedRequest(path: "v1/me", method: "DELETE")
+        for key in [Self.sessionKey, Self.installationKey, Self.pendingKey, Self.acknowledgementsKey] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
     func acknowledge(jobID: UUID) async throws {
@@ -181,7 +192,7 @@ struct CloudAnalysisClient {
                 progress("Cloud analysis complete.")
                 return analysis
             case .failed:
-                Self.clearPending()
+                if Self.pendingAnalysis?.jobID == pending.jobID { Self.clearPending() }
                 throw CloudAnalysisError.service(snapshot.errorMessage ?? "Cloud analysis could not finish this episode.")
             case .processing:
                 progress("Transcribing and analyzing the complete episode in the cloud. You can leave the app.")
@@ -204,6 +215,16 @@ struct CloudAnalysisClient {
                 UserDefaults.standard.removeObject(forKey: Self.sessionKey)
                 token = try await sessionToken()
                 continue
+            }
+            if http.statusCode == 404, path.hasSuffix("/acknowledge") {
+                // A result already removed by retention needs no further acknowledgement.
+                return Data()
+            }
+            if http.statusCode == 404, path.hasPrefix("v1/episode-jobs/"),
+               let jobID = path.split(separator: "/").dropFirst(2).first.flatMap({ UUID(uuidString: String($0)) }) {
+                if Self.pendingAnalysis?.jobID == jobID { Self.clearPending() }
+                if path.hasSuffix("/cancel") { return Data() }
+                throw CloudAnalysisError.service("This cloud analysis is no longer available. Your saved episode is safe; select Retry or Import, Analyze & Save to start a new analysis.")
             }
             guard (200...299).contains(http.statusCode) else {
                 throw CloudAnalysisError.service(
@@ -306,8 +327,23 @@ struct CloudAnalysisClient {
     static func acknowledgeSavedAnalysis(jobID: UUID?) {
         guard let jobID else { return }
         if pendingAnalysis?.jobID == jobID { clearPending() }
-        // A failed acknowledgement leaves the server result retained, never deleted early.
-        Task { try? await CloudAnalysisClient().acknowledge(jobID: jobID) }
+        var pending = UserDefaults.standard.stringArray(forKey: acknowledgementsKey) ?? []
+        if !pending.contains(jobID.uuidString) { pending.append(jobID.uuidString) }
+        UserDefaults.standard.set(pending, forKey: acknowledgementsKey)
+        Task { await retryAcknowledgements() }
+    }
+
+    static func retryAcknowledgements() async {
+        let pending = UserDefaults.standard.stringArray(forKey: acknowledgementsKey) ?? []
+        for value in pending {
+            guard let id = UUID(uuidString: value) else { continue }
+            do {
+                try await CloudAnalysisClient().acknowledge(jobID: id)
+                var current = UserDefaults.standard.stringArray(forKey: acknowledgementsKey) ?? []
+                current.removeAll { $0 == value }
+                UserDefaults.standard.set(current, forKey: acknowledgementsKey)
+            } catch { return }
+        }
     }
 
     private func serviceMessage(from data: Data, response: HTTPURLResponse? = nil) -> String? {
@@ -345,10 +381,12 @@ private struct CloudEpisodeResult: Decodable {
         let time: Double
         let question: String
         let expectedAnswer: String
+        let timingVerified: Bool?
 
         enum CodingKeys: String, CodingKey {
             case time, question
             case expectedAnswer = "expected_answer"
+            case timingVerified = "timing_verified"
         }
     }
 
@@ -363,10 +401,16 @@ private struct CloudEpisodeResult: Decodable {
             duration: duration,
             summary: summary,
             prompts: prompts.map {
-                Prompt(id: UUID(), timestampSeconds: $0.time, question: $0.question, expectedAnswer: $0.expectedAnswer)
+                Prompt(id: stablePromptID($0), timestampSeconds: $0.time, question: $0.question, expectedAnswer: $0.expectedAnswer, timingVerified: $0.timingVerified == true)
             }.sorted { $0.timestampSeconds < $1.timestampSeconds },
             recommendedPromptCount: prompts.count,
             contentDepthLabel: "Cloud analyzed"
         )
+    }
+
+    private func stablePromptID(_ prompt: CloudPrompt) -> UUID {
+        let digest = SHA256.hash(data: Data("\(prompt.time)|\(prompt.question)|\(prompt.expectedAnswer)".utf8))
+        let bytes = Array(digest.prefix(16))
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 }

@@ -176,13 +176,15 @@ struct Prompt: Identifiable, Codable {
     let expectedAnswer: String
     // Kept under its original storage name; this is now an optional delay after the answer ends.
     let leadTimeSeconds: Double
+    let timingVerified: Bool
 
-    init(id: UUID, timestampSeconds: Double, question: String, expectedAnswer: String, leadTimeSeconds: Double = 0) {
+    init(id: UUID, timestampSeconds: Double, question: String, expectedAnswer: String, leadTimeSeconds: Double = 0, timingVerified: Bool = false) {
         self.id = id
         self.timestampSeconds = timestampSeconds
         self.question = question
         self.expectedAnswer = expectedAnswer
         self.leadTimeSeconds = leadTimeSeconds
+        self.timingVerified = timingVerified
     }
 
     enum CodingKeys: String, CodingKey {
@@ -191,6 +193,7 @@ struct Prompt: Identifiable, Codable {
         case question
         case expectedAnswer
         case leadTimeSeconds
+        case timingVerified
     }
 
     init(from decoder: Decoder) throws {
@@ -200,6 +203,7 @@ struct Prompt: Identifiable, Codable {
         question = try container.decode(String.self, forKey: .question)
         expectedAnswer = try container.decode(String.self, forKey: .expectedAnswer)
         leadTimeSeconds = try container.decodeIfPresent(Double.self, forKey: .leadTimeSeconds) ?? 0
+        timingVerified = try container.decodeIfPresent(Bool.self, forKey: .timingVerified) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -209,6 +213,61 @@ struct Prompt: Identifiable, Codable {
         try container.encode(question, forKey: .question)
         try container.encode(expectedAnswer, forKey: .expectedAnswer)
         try container.encode(leadTimeSeconds, forKey: .leadTimeSeconds)
+        try container.encode(timingVerified, forKey: .timingVerified)
+    }
+}
+
+struct TimedTranscriptSegment {
+    let start: Double
+    let end: Double
+    let text: String
+}
+
+enum TranscriptTiming {
+    static let markerPattern = #"\[\[AUDIO_SECONDS ([0-9.]+)-([0-9.]+)\]\]"#
+
+    static func segments(in transcript: String) -> [TimedTranscriptSegment] {
+        guard let regex = try? NSRegularExpression(pattern: markerPattern) else { return [] }
+        let source = transcript as NSString
+        let matches = regex.matches(in: transcript, range: NSRange(location: 0, length: source.length))
+        return matches.enumerated().compactMap { index, match in
+            guard let start = Double(source.substring(with: match.range(at: 1))),
+                  let end = Double(source.substring(with: match.range(at: 2))),
+                  start.isFinite, end.isFinite, start >= 0, end > start else { return nil }
+            let lower = NSMaxRange(match.range)
+            let upper = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            let text = source.substring(with: NSRange(location: lower, length: upper - lower)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return TimedTranscriptSegment(start: start, end: end, text: text)
+        }
+    }
+
+    static func annotate(_ segments: [TimedTranscriptSegment]) -> String {
+        segments.map { "[[AUDIO_SECONDS \(String(format: "%.2f", $0.start))-\(String(format: "%.2f", $0.end))]] \($0.text)" }.joined(separator: "\n")
+    }
+
+    static func plainText(_ transcript: String) -> String {
+        transcript.replacingOccurrences(of: markerPattern, with: " ", options: .regularExpression)
+    }
+
+    static func normalized(_ text: String) -> String {
+        text.lowercased().replacingOccurrences(of: #"[^\p{L}\p{N}\s]"#, with: " ", options: .regularExpression)
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    static func evidenceEnd(quote: String, transcript: String) -> Double? {
+        let key = normalized(quote)
+        guard key.count >= 20 else { return nil }
+        var text = ""
+        var spans: [(upper: Int, end: Double)] = []
+        for segment in segments(in: transcript) {
+            if !text.isEmpty { text += " " }
+            text += normalized(segment.text)
+            spans.append((text.count, segment.end))
+        }
+        guard let range = text.range(of: key, options: .backwards) else { return nil }
+        let upper = text.distance(from: text.startIndex, to: range.upperBound)
+        return spans.first { $0.upper >= upper }?.end
     }
 }
 
@@ -256,4 +315,5 @@ struct PromptResponse: Identifiable, Codable {
     var awardedPoints: Int
     var feedback: String
     var lastUpdated: Date
+    var usedOfflineEstimate: Bool? = nil
 }

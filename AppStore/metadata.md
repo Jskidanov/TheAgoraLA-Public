@@ -1,11 +1,11 @@
-# The Agora LA - App Store Metadata
+# Agora Interactive Podcast - App Store Metadata
 
 ## Identity
 
-- App name: The Agora LA
+- App name: Agora Interactive Podcast
 - Bundle ID: com.theagora.la
 - SKU: THEAGORALA-IOS-001
-- Version: 1.0
+- Version: 1.0.2 (build 3)
 - Primary language: English (U.S.)
 - Primary category: Education
 - Secondary category: Entertainment
@@ -27,7 +27,7 @@ podcast,learning,quiz,transcript,listening,recall,education,audio,comprehension,
 
 Description:
 
-The Agora LA helps you listen with purpose.
+Agora Interactive Podcast helps you listen with purpose.
 
 Paste a podcast link and Agora imports the episode details, creates a concise listener-facing brief, and gives you access to the full transcript. Its AI reads the complete episode before selecting a small set of difficult but fair questions about the ideas, arguments, examples, and conclusions that matter most.
 
@@ -44,9 +44,9 @@ WHAT YOU CAN DO
 - Receive AI feedback based on the podcast-supported answer
 - Track Agora Points and progress through achievement levels
 
-FREE, LISTENER-CONTROLLED AI
+BRING YOUR OWN AI
 
-The Agora is fully free and contains no in-app purchases, subscriptions, or paid feature unlocks. To analyze a new podcast, connect an AI-provider account you control. Any provider usage relationship is directly between you and that provider; The Agora does not sell credits or receive payment.
+Connect your own OpenRouter account to power transcript analysis and answer feedback. Keep control of your provider access and usage. Agora does not include an AI allowance; provider usage can incur separate charges under your provider account. ChatGPT and Claude consumer subscriptions do not include OpenRouter API credits.
 
 Podcast availability depends on the publisher and whether the episode page, feed, transcript, or audio is publicly accessible. AI can make mistakes, so use the full transcript to verify important details.
 
