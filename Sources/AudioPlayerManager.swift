@@ -20,8 +20,10 @@ final class AudioPlayerManager: ObservableObject {
     private var bufferEmptyObserver: NSKeyValueObservation?
     private var likelyToKeepUpObserver: NSKeyValueObservation?
     private var statusObserver: NSKeyValueObservation?
+    private var timeControlObserver: NSKeyValueObservation?
     private var interruptionObserver: NSObjectProtocol?
     private var wasPlayingBeforeInterruption = false
+    private var systemPausedWhilePlaying = false
     private var loadGeneration = 0
     private var playbackIsHeld = false
 
@@ -68,6 +70,7 @@ final class AudioPlayerManager: ObservableObject {
         bufferEmptyObserver = nil
         likelyToKeepUpObserver = nil
         statusObserver = nil
+        timeControlObserver = nil
         if let token = interruptionObserver {
             NotificationCenter.default.removeObserver(token)
             interruptionObserver = nil
@@ -131,6 +134,17 @@ final class AudioPlayerManager: ObservableObject {
         let newPlayer = AVPlayer(playerItem: item)
         newPlayer.automaticallyWaitsToMinimizeStalling = true
         newPlayer.seek(to: .zero)
+        // Keep isPlaying truthful when the system pauses audio (route changes, stalls),
+        // so the Play button never needs a second tap to recover.
+        timeControlObserver = newPlayer.observe(\.timeControlStatus, options: [.new]) { [weak self] observedPlayer, _ in
+            DispatchQueue.main.async {
+                guard let self, self.loadGeneration == generation, self.player === observedPlayer else { return }
+                if observedPlayer.timeControlStatus == .paused, self.isPlaying {
+                    self.systemPausedWhilePlaying = true
+                    self.isPlaying = false
+                }
+            }
+        }
         player = newPlayer
         loadedURL = url
 
@@ -142,7 +156,7 @@ final class AudioPlayerManager: ObservableObject {
                   let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
             switch type {
             case .began:
-                self.wasPlayingBeforeInterruption = self.isPlaying && !self.playbackIsHeld
+                self.wasPlayingBeforeInterruption = (self.isPlaying || self.systemPausedWhilePlaying) && !self.playbackIsHeld
                 self.pause()
             case .ended:
                 if let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
@@ -173,6 +187,7 @@ final class AudioPlayerManager: ObservableObject {
         playbackEndedObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.isPlaying = false
+            self.systemPausedWhilePlaying = false
             self.isBuffering = false
             if self.duration.isFinite, self.duration > 0 {
                 self.currentTime = self.duration
@@ -185,6 +200,12 @@ final class AudioPlayerManager: ObservableObject {
 
     func play() {
         guard !playbackIsHeld else { return }
+        if player?.currentItem?.status == .failed, let url = loadedURL {
+            // A failed item never plays again; reload it at the same position.
+            let resumeAt = currentTime
+            load(url: url)
+            seek(to: resumeAt)
+        }
         guard let player else { return }
         configureAudioSession()
         if duration.isFinite, duration > 0, currentTime >= duration - 0.5 {
@@ -192,11 +213,13 @@ final class AudioPlayerManager: ObservableObject {
             currentTime = 0
         }
         player.play()
+        systemPausedWhilePlaying = false
         isPlaying = true
     }
 
     func pause() {
         player?.pause()
+        systemPausedWhilePlaying = false
         isPlaying = false
     }
 

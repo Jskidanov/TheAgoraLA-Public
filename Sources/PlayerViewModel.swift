@@ -166,7 +166,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
             .store(in: &cancellables)
 
         // Wire remote command handlers
-        nowPlaying.playHandler = { [weak self] in self?.audioManager.play() }
+        nowPlaying.playHandler = { [weak self] in self?.play() }
         nowPlaying.pauseHandler = { [weak self] in self?.audioManager.pause() }
         nowPlaying.skipForwardHandler = { [weak self] in self?.skip(by: 15) }
         nowPlaying.skipBackwardHandler = { [weak self] in self?.skip(by: -15) }
@@ -309,6 +309,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 showPrompt = false
                 self.activePrompt = nil
                 hasScoredActivePrompt = false
+                audioManager.setPlaybackHeld(false)
             }
         }
         prefetchUpcomingPromptNarration()
@@ -369,9 +370,20 @@ final class PlayerViewModel: NSObject, ObservableObject {
         if audioManager.isPlaying {
             audioManager.pause()
         } else {
-            prefetchUpcomingPromptNarration()
-            audioManager.play()
+            play()
         }
+    }
+
+    /// Play must always work. A question on screen is closed exactly as Continue closes it,
+    /// and a playback hold left behind without a visible question is released.
+    func play() {
+        if showPrompt, activePrompt != nil {
+            continuePlayback()
+            return
+        }
+        audioManager.setPlaybackHeld(false)
+        prefetchUpcomingPromptNarration()
+        audioManager.play()
     }
 
     func skip(by seconds: Double) {
