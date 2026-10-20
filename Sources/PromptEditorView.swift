@@ -113,11 +113,14 @@ struct PromptEditorView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     editorStepHeader(
                         number: 1,
-                        title: "Choose an Episode",
-                        detail: "Paste a link or browse for a podcast."
+                        title: "Choose & Analyze an Episode",
+                        detail: "Paste a link or browse, then import, analyze, and save."
                     )
 
                     Text("Podcast Link")
+                        .font(AgoraTheme.tagFont)
+                        .foregroundColor(AgoraTheme.inkMuted)
+                    Text("Paste an episode or show link from Spotify, Apple Podcasts, Pocket Casts, Overcast, Amazon Music, iHeart, YouTube Music, a public RSS feed, or a direct audio link.")
                         .font(AgoraTheme.tagFont)
                         .foregroundColor(AgoraTheme.inkMuted)
                     TextField("https://...", text: $audioURLText)
@@ -140,16 +143,7 @@ struct PromptEditorView: View {
                             }
                         }
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) {
-                            browsePodcastsButton
-                            podcastBacklogButton
-                        }
-                        VStack(spacing: 10) {
-                            browsePodcastsButton
-                            podcastBacklogButton
-                        }
-                    }
+                    browsePodcastsButton
 
                     if hasPendingSourceChange {
                         Label("New podcast link ready to import", systemImage: "arrow.triangle.2.circlepath")
@@ -157,19 +151,11 @@ struct PromptEditorView: View {
                             .foregroundColor(AgoraTheme.accent)
                     }
 
-                    Text("Paste an episode or show link from Spotify, Apple Podcasts, Pocket Casts, Overcast, Amazon Music, iHeart, YouTube Music, a public RSS feed, or a direct audio link.")
+                    Divider()
+
+                    Text("Let AI choose the right number of questions, or set it yourself.")
                         .font(AgoraTheme.tagFont)
                         .foregroundColor(AgoraTheme.inkMuted)
-                }
-            }
-
-            AgoraCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    editorStepHeader(
-                        number: 2,
-                        title: "Analyze & Save",
-                        detail: "Let AI choose the right number of questions, or set it yourself."
-                    )
 
                     Picker("Prompt Count", selection: $promptCountMode) {
                         ForEach(PromptCountMode.allCases) { mode in
@@ -235,6 +221,18 @@ struct PromptEditorView: View {
                             .buttonStyle(AgoraOutlineButtonStyle())
                         }
                     }
+                }
+            }
+
+            AgoraCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    editorStepHeader(
+                        number: 2,
+                        title: "Podcast Backlog",
+                        detail: "Queue several episodes to analyze in one batch."
+                    )
+
+                    podcastBacklogButton
                 }
             }
 
