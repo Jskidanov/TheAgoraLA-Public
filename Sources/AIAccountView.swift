@@ -27,6 +27,8 @@ struct AIAccountView: View {
     @State private var apiKey = ""
     @State private var errorMessage = ""
     @State private var showError = false
+    @State private var showAIProcessingConsent = false
+    @State private var consentForAPIKey = false
     @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
@@ -74,6 +76,14 @@ struct AIAccountView: View {
                 Button("Not Now", role: .cancel) {}
             } message: {
                 Text(errorMessage)
+            }
+            .aiProcessingConsent(isPresented: $showAIProcessingConsent, allowTitle: "Allow AI & Connect") {
+                providerAccount.allowsAIProcessing = true
+                Task { @MainActor in
+                    await Task.yield()
+                    if consentForAPIKey { await connectAPIKey() }
+                    else { await connectProvider() }
+                }
             }
         }
         .navigationViewStyle(.stack)
@@ -374,7 +384,9 @@ struct AIAccountView: View {
                 Label("Secure and Listener-Controlled", systemImage: "lock.shield.fill")
                     .font(AgoraTheme.cardTitleFont)
                     .foregroundColor(AgoraTheme.ink)
-                Text("The provider credential stays in the iPhone Keychain. For cloud analysis, an encrypted temporary copy and the selected podcast material are sent to The Agora's secure job service, used only for that request, and erased when the job finishes.")
+                Toggle("Allow AI processing", isOn: $providerAccount.allowsAIProcessing)
+                    .tint(AgoraTheme.accent)
+                Text(AIProcessingConsent.disclosure)
                     .font(AgoraTheme.bodyFont)
                     .foregroundColor(AgoraTheme.inkMuted)
 
@@ -434,6 +446,11 @@ struct AIAccountView: View {
 
     @MainActor
     private func connectProvider() async {
+        guard providerAccount.allowsAIProcessing else {
+            consentForAPIKey = false
+            showAIProcessingConsent = true
+            return
+        }
         guard !isConnectingProvider else { return }
         isConnectingProvider = true
         defer { isConnectingProvider = false }
@@ -457,6 +474,12 @@ struct AIAccountView: View {
 
     @MainActor
     private func connectAPIKey() async {
+        guard providerAccount.allowsAIProcessing else {
+            consentForAPIKey = true
+            isAPIKeyFocused = false
+            showAIProcessingConsent = true
+            return
+        }
         guard !isVerifyingAPIKey else { return }
         isAPIKeyFocused = false
         isVerifyingAPIKey = true

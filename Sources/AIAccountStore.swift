@@ -48,9 +48,12 @@ enum AIAccountError: LocalizedError {
     case signInRejected(String)
     case keychainFailure
     case secureRandomUnavailable
+    case dataSharingPermissionRequired
 
     var errorDescription: String? {
         switch self {
+        case .dataSharingPermissionRequired:
+            return "Permission is needed before sending podcast material or your answers to AI providers. Choose Allow AI & Analyze to continue."
         case .couldNotStartSignIn:
             return "The AI sign-in window could not be opened."
         case .secureRandomUnavailable:
@@ -72,6 +75,9 @@ enum AIAccountError: LocalizedError {
 @MainActor
 final class AIAccountStore: NSObject, ObservableObject {
     @Published private(set) var isConnected: Bool
+    @Published var allowsAIProcessing: Bool {
+        didSet { AIProcessingConsent.setAllowed(allowsAIProcessing) }
+    }
     @Published var powerLevel: AIPowerLevel {
         didSet { UserDefaults.standard.set(powerLevel.rawValue, forKey: Self.powerLevelKey) }
     }
@@ -84,11 +90,13 @@ final class AIAccountStore: NSObject, ObservableObject {
     override init() {
         let saved = UserDefaults.standard.string(forKey: Self.powerLevelKey)
         powerLevel = AIPowerLevel(rawValue: saved ?? "") ?? .balanced
+        allowsAIProcessing = Self.hasDataSharingConsent
         isConnected = Self.readAPIKey() != nil
         super.init()
     }
 
     func connect() async throws {
+        guard allowsAIProcessing else { throw AIAccountError.dataSharingPermissionRequired }
         let verifier = try Self.randomVerifier()
         let challenge = Self.codeChallenge(for: verifier)
         var components = URLComponents(string: "https://openrouter.ai/auth")
@@ -112,6 +120,7 @@ final class AIAccountStore: NSObject, ObservableObject {
     }
 
     func connect(usingAPIKey rawKey: String) async throws {
+        guard allowsAIProcessing else { throw AIAccountError.dataSharingPermissionRequired }
         let key = rawKey
             .components(separatedBy: .whitespacesAndNewlines)
             .joined()
@@ -152,6 +161,7 @@ final class AIAccountStore: NSObject, ObservableObject {
     func disconnect() {
         Self.deleteAPIKey()
         isConnected = false
+        allowsAIProcessing = false
     }
 
     func refreshConnectionStatus() async {
@@ -184,6 +194,10 @@ final class AIAccountStore: NSObject, ObservableObject {
 
     nonisolated static func apiKey() -> String? {
         readAPIKey()
+    }
+
+    nonisolated static var hasDataSharingConsent: Bool {
+        AIProcessingConsent.isAllowed()
     }
 
     nonisolated static func selectedModelID() -> String {

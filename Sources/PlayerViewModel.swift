@@ -1136,7 +1136,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
         guard signature != narrationPrefetchSignature,
               let apiKey = AIAccountStore.apiKey(), !apiKey.isEmpty else { return }
         // Respect an explicit AI-processing opt-out, including when the key is still saved.
-        guard UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false else { return }
+        guard AIProcessingConsent.isAllowed() else { return }
         narrationPrefetchSignature = signature
         narrationPrefetchTask?.cancel()
         narrationPrefetchTask = Task {
@@ -1144,7 +1144,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
             try? await Task.sleep(nanoseconds: 600_000_000)
             for text in questions {
                 guard !Task.isCancelled, AIAccountStore.apiKey() == apiKey,
-                      UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false else { return }
+                      AIProcessingConsent.isAllowed() else { return }
                 _ = try? await NaturalNarrationService.shared.audio(for: text, apiKey: apiKey, persist: true)
             }
         }
@@ -1156,7 +1156,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
         let expectedState = drivingPromptState
         if selectedNarrationVoiceID == NarrationVoiceOption.automaticID {
-            let permitsNetwork = UserDefaults.standard.object(forKey: "TheAgoraLA.AI.DataSharingConsent.v1") as? Bool != false
+            let permitsNetwork = AIProcessingConsent.isAllowed()
             startNaturalNarration(
                 text: text, apiKey: permitsNetwork ? AIAccountStore.apiKey() : nil,
                 expectedState: expectedState, persist: persist

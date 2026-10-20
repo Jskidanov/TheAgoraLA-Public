@@ -869,6 +869,12 @@ private struct PodcastLinkDraft: Identifiable {
 }
 
 struct PodcastBacklogView: View {
+    private enum AnalysisAction {
+        case start
+        case retry(UUID)
+        case reanalyze(UUID)
+    }
+
     @ObservedObject var episodeStore: EpisodeStore
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var aiAccount: AIAccountStore
@@ -876,6 +882,9 @@ struct PodcastBacklogView: View {
     @State private var linkDrafts = [PodcastLinkDraft()]
     @State private var showPodcastSearch = false
     @State private var showAIAccount = false
+    @State private var showAIProcessingConsent = false
+    @State private var pendingAnalysisAction: AnalysisAction?
+    @State private var resumeAnalysisAfterSearch = false
     @FocusState private var focusedLinkID: UUID?
 
     var body: some View {
@@ -909,14 +918,10 @@ struct PodcastBacklogView: View {
                                     }
                                 },
                                 onRetry: {
-                                    backlog.retry(item.id)
-                                    Task { await backlog.startAll(episodeStore: episodeStore) }
+                                    requestAnalysis(.retry(item.id))
                                 },
                                 onReanalyze: {
-                                    Task {
-                                        await backlog.reanalyze(item.id)
-                                        await backlog.startAll(episodeStore: episodeStore)
-                                    }
+                                    requestAnalysis(.reanalyze(item.id))
                                 },
                                 onRemove: {
                                     Task {
@@ -947,11 +952,28 @@ struct PodcastBacklogView: View {
                 try? await Task.sleep(nanoseconds: delay)
             }
         }
-        .sheet(isPresented: $showAIAccount) {
+        .aiProcessingConsent(isPresented: $showAIProcessingConsent, onAllow: {
+            aiAccount.allowsAIProcessing = true
+            Task { @MainActor in
+                await Task.yield()
+                continueRequestedAnalysis()
+            }
+        }, onCancel: { pendingAnalysisAction = nil })
+        .sheet(isPresented: $showAIAccount, onDismiss: {
+            guard aiAccount.isConnected, aiAccount.allowsAIProcessing else {
+                pendingAnalysisAction = nil
+                return
+            }
+            continueRequestedAnalysis()
+        }) {
             AIAccountView()
                 .environmentObject(aiAccount)
         }
-        .sheet(isPresented: $showPodcastSearch) {
+        .sheet(isPresented: $showPodcastSearch, onDismiss: {
+            guard resumeAnalysisAfterSearch else { return }
+            resumeAnalysisAfterSearch = false
+            requestAnalysis()
+        }) {
             PodcastSearchView(mode: .multiple) { picks in
                 addBrowsedAndStart(picks)
             }
@@ -961,7 +983,32 @@ struct PodcastBacklogView: View {
     private func addBrowsedAndStart(_ picks: [PodcastSearchSelection]) {
         focusedLinkID = nil
         guard backlog.addBrowsedEpisodes(picks) else { return }
-        Task { await backlog.startAll(episodeStore: episodeStore) }
+        resumeAnalysisAfterSearch = true
+    }
+
+    private func requestAnalysis(_ action: AnalysisAction = .start) {
+        pendingAnalysisAction = action
+        continueRequestedAnalysis()
+    }
+
+    private func continueRequestedAnalysis() {
+        guard let action = pendingAnalysisAction else { return }
+        switch AIProcessingConsent.nextStep(isConnected: aiAccount.isConnected, allowsProcessing: aiAccount.allowsAIProcessing) {
+        case .askPermission:
+            showAIProcessingConsent = true
+        case .connectAccount:
+            showAIAccount = true
+        case .analyze:
+            pendingAnalysisAction = nil
+            Task {
+                switch action {
+                case .start: break
+                case .retry(let id): backlog.retry(id)
+                case .reanalyze(let id): await backlog.reanalyze(id)
+                }
+                await backlog.startAll(episodeStore: episodeStore)
+            }
+        }
     }
 
     private var header: some View {
@@ -1158,9 +1205,7 @@ struct PodcastBacklogView: View {
         guard backlog.addLinks(from: entries) else { return }
 
         linkDrafts = [PodcastLinkDraft()]
-        Task {
-            await backlog.startAll(episodeStore: episodeStore)
-        }
+        requestAnalysis()
     }
 
     private func pasteCopiedLinks() {
@@ -1222,11 +1267,7 @@ struct PodcastBacklogView: View {
                 }
 
                 Button(backlog.startButtonTitle) {
-                    if aiAccount.isConnected {
-                        Task { await backlog.startAll(episodeStore: episodeStore) }
-                    } else {
-                        showAIAccount = true
-                    }
+                    requestAnalysis()
                 }
                 .buttonStyle(AgoraPillButtonStyle())
                 .disabled(!backlog.hasStartableItems)

@@ -49,6 +49,9 @@ struct PromptEditorView: View {
     @State private var promptCountMode: PromptCountMode = .automatic
     @State private var showAdditionalPromptsStack = false
     @State private var showAIAccount = false
+    @State private var showAIProcessingConsent = false
+    @State private var resumeImportAfterConnection = false
+    @State private var resumeImportAfterSearch = false
     @State private var showPodcastBacklog = false
     @State private var showPodcastSearch = false
     @State private var browsedEpisode: BrowsedEpisodeSelection?
@@ -201,11 +204,7 @@ struct PromptEditorView: View {
                     }
 
                     Button("Import, Analyze & Save") {
-                        if hasUsableAI {
-                            importTask = Task { await importAndSaveEpisode() }
-                        } else {
-                            showAIAccount = true
-                        }
+                        requestImport()
                     }
                     .buttonStyle(AgoraPillButtonStyle())
                     .disabled(isResolving || isPreparingTranscript)
@@ -491,7 +490,14 @@ struct PromptEditorView: View {
         } message: {
             Text(analysisErrorMessage)
         }
-        .sheet(isPresented: $showAIAccount) {
+        .aiProcessingConsent(isPresented: $showAIProcessingConsent) {
+            aiAccount.allowsAIProcessing = true
+            Task { @MainActor in
+                await Task.yield()
+                requestImport()
+            }
+        }
+        .sheet(isPresented: $showAIAccount, onDismiss: resumeImportAfterAISetup) {
             AIAccountView()
                 .environmentObject(aiAccount)
         }
@@ -499,7 +505,11 @@ struct PromptEditorView: View {
             PodcastBacklogView(episodeStore: episodeStore)
                 .environmentObject(aiAccount)
         }
-        .sheet(isPresented: $showPodcastSearch) {
+        .sheet(isPresented: $showPodcastSearch, onDismiss: {
+            guard resumeImportAfterSearch else { return }
+            resumeImportAfterSearch = false
+            requestImport()
+        }) {
             PodcastSearchView { picks in
                 guard let pick = picks.first else { return }
                 applyBrowsedEpisode(feedURL: pick.feedURL, guid: pick.guid, title: pick.title)
@@ -647,12 +657,34 @@ struct PromptEditorView: View {
             guid: guid,
             title: title
         )
-        guard hasUsableAI else {
-            showAIAccount = true
+        resumeImportAfterSearch = true
+    }
+
+    @MainActor
+    private func requestImport() {
+        guard !isResolving, !isPreparingTranscript, importTask == nil else { return }
+        guard (try? validatedInputURL()) != nil else {
+            showInvalidURL = true
             return
         }
-        guard !isResolving, !isPreparingTranscript else { return }
-        importTask = Task { await importAndSaveEpisode() }
+        switch AIProcessingConsent.nextStep(isConnected: hasUsableAI, allowsProcessing: aiAccount.allowsAIProcessing) {
+        case .askPermission:
+            showAIProcessingConsent = true
+        case .connectAccount:
+            resumeImportAfterConnection = true
+            showAIAccount = true
+        case .analyze:
+            resumeImportAfterConnection = false
+            importTask = Task { await importAndSaveEpisode() }
+        }
+    }
+
+    @MainActor
+    private func resumeImportAfterAISetup() {
+        guard resumeImportAfterConnection else { return }
+        resumeImportAfterConnection = false
+        guard hasUsableAI, aiAccount.allowsAIProcessing else { return }
+        requestImport()
     }
 
     @MainActor
@@ -931,6 +963,10 @@ struct PromptEditorView: View {
 
     @MainActor
     private func presentAnalysisError(_ error: Error) {
+        if case AIAccountError.dataSharingPermissionRequired = error {
+            showAIProcessingConsent = true
+            return
+        }
         if error is PromptEditorError {
             showInvalidURL = true
             return

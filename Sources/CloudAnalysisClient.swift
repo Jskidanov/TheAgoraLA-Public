@@ -113,6 +113,7 @@ struct CloudAnalysisClient {
         forceRefresh: Bool = false,
         rememberAsCurrent: Bool = false
     ) async throws -> PendingCloudAnalysis {
+        guard AIAccountStore.hasDataSharingConsent else { throw AIAccountError.dataSharingPermissionRequired }
         var body: [String: Any] = [
             "title": title,
             "audio_url": audioURL.absoluteString,

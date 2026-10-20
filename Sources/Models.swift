@@ -1,5 +1,30 @@
 import Foundation
 
+enum AIProcessingConsent {
+    private static let key = "TheAgoraLA.AI.DataSharingConsent.v1"
+
+    enum NextStep: Equatable {
+        case askPermission
+        case connectAccount
+        case analyze
+    }
+
+    static let disclosure = "Podcast audio and transcripts, typed or spoken answers, and narration text are sent to OpenRouter and model providers OpenAI, Microsoft, or NVIDIA to create questions, grade answers, and generate speech. Cloud analysis also sends the selected episode and an encrypted temporary provider key to Agora's server. Your saved account key stays in this iPhone's Keychain. You can turn this off anytime in AI Settings."
+
+    static func isAllowed(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: key)
+    }
+
+    static func setAllowed(_ allowed: Bool, in defaults: UserDefaults = .standard) {
+        defaults.set(allowed, forKey: key)
+    }
+
+    static func nextStep(isConnected: Bool, allowsProcessing: Bool) -> NextStep {
+        guard allowsProcessing else { return .askPermission }
+        return isConnected ? .analyze : .connectAccount
+    }
+}
+
 enum HandsFreePreference {
     private static let key = "TheAgoraLA.CompleteHandsFree"
 

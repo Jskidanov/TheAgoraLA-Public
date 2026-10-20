@@ -1,5 +1,21 @@
 import SwiftUI
 
+extension View {
+    func aiProcessingConsent(
+        isPresented: Binding<Bool>,
+        allowTitle: String = "Allow AI & Analyze",
+        onAllow: @escaping () -> Void,
+        onCancel: @escaping () -> Void = {}
+    ) -> some View {
+        alert("Allow AI Processing?", isPresented: isPresented) {
+            Button(allowTitle, action: onAllow)
+            Button("Not Now", role: .cancel, action: onCancel)
+        } message: {
+            Text(AIProcessingConsent.disclosure)
+        }
+    }
+}
+
 #if os(iOS) || os(tvOS) || os(visionOS)
 import UIKit
 #elseif os(macOS)

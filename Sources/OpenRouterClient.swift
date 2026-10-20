@@ -954,6 +954,7 @@ final class OpenRouterClient: @unchecked Sendable {
     }
 
     private func apiKey() throws -> String {
+        guard AIAccountStore.hasDataSharingConsent else { throw AIAccountError.dataSharingPermissionRequired }
         guard let key = AIAccountStore.apiKey(), !key.isEmpty else { throw OpenRouterClientError.notConnected }
         return key
     }
