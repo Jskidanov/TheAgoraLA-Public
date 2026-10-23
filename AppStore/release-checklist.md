@@ -1,4 +1,4 @@
-# Release Checklist - 1.0.2 (3)
+# Release Checklist - 1.0.2 (5)
 
 This is a submission checklist, not a declaration that all manual checks have
 passed. See `release-audit-2026-10-08.md` for verified results and remaining gates.
@@ -24,7 +24,7 @@ passed. See `release-audit-2026-10-08.md` for verified results and remaining gat
 - Set price to Free and do not create in-app purchase products.
 - Complete the metadata, privacy questionnaire, age rating, content-rights questions, and review notes from this folder.
 - Upload polished iPhone and iPad screenshots with no transparency.
-- Use manual release for version 1.0.2 (3).
+- Use manual release for version 1.0.2 (5).
 - Provide the dedicated, prefunded and budget-capped OpenRouter review key and an authorized public review-episode URL in confidential review information. Neither belongs in GitHub.
 
 ## Production Verification

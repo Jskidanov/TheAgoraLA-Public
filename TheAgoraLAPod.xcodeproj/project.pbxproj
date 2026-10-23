@@ -343,7 +343,7 @@
 				AGORA_API_BASE_URL = "https://agora-api-production-0aa0.up.railway.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 46YPJ6ZY6P;
 				INFOPLIST_FILE = TheAgoraLA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -365,7 +365,7 @@
 				AGORA_API_BASE_URL = "https://agora-api-production-0aa0.up.railway.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 46YPJ6ZY6P;
 				INFOPLIST_FILE = TheAgoraLA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
