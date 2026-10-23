@@ -25,7 +25,7 @@ final class AudioPlayerManager: ObservableObject {
     private var wasPlayingBeforeInterruption = false
     private var systemPausedWhilePlaying = false
     private var loadGeneration = 0
-    private var playbackIsHeld = false
+    private(set) var playbackIsHeld = false
 
     private func configureAudioSession() {
         #if os(iOS)

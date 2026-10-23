@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        A71000000000000000000001 = {isa = PBXBuildFile; fileRef = A71000000000000000000002; };
+        A71000000000000000000003 = {isa = PBXBuildFile; fileRef = A71000000000000000000004; };
 		E61000000000000000000001 /* NaturalNarrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61000000000000000000002 /* NaturalNarrationService.swift */; };
 		131DBE4BBAAD433D97BA87D5 /* AgoraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A73052939B46278D556316 /* AgoraTheme.swift */; };
 		3B0607BD6B87444A8F669AF0 /* InteractivePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D700D956A164F9BAA62967B /* InteractivePromptView.swift */; };
@@ -40,6 +42,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        A71000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptNarrator.swift; sourceTree = "<group>"; };
+        A71000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/PlaybackFlowTests.swift; sourceTree = SOURCE_ROOT; };
+        A71000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = PlaybackFlowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E61000000000000000000002 /* NaturalNarrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalNarrationService.swift; sourceTree = "<group>"; };
 		06B0D364C26C4A6DA402C364 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		0C56CF91ADD446C496ED0F9A /* MockEpisodeProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockEpisodeProvider.swift; sourceTree = "<group>"; };
@@ -76,6 +81,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+        A71000000000000000000013 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		E67C21C4A82049828547274E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -89,6 +95,7 @@
 		17B8BCE48283461EB9BD5B71 = {
 			isa = PBXGroup;
 			children = (
+                A71000000000000000000004 /* PlaybackFlowTests.swift */,
 				AAA180B6519E49E782DD73EA /* Sources */,
 				79EBDDFF622C4796A7BF4FEC /* TheAgoraLA */,
 				883F0EE7366240D68BDE555E /* Products */,
@@ -109,6 +116,7 @@
 		883F0EE7366240D68BDE555E /* Products */ = {
 			isa = PBXGroup;
 			children = (
+                A71000000000000000000005 /* PlaybackFlowTests.xctest */,
 				7E7C02D3E2CD49D387486B09 /* TheAgoraLA.app */,
 			);
 			name = Products;
@@ -117,6 +125,7 @@
 		AAA180B6519E49E782DD73EA /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+                A71000000000000000000002 /* PromptNarrator.swift */,
 				E61000000000000000000002 /* NaturalNarrationService.swift */,
 				B202C0017A1E4A8B9C0D1E11 /* AIAccountStore.swift */,
 				B202C0017A1E4A8B9C0D1E12 /* AIAccountView.swift */,
@@ -152,6 +161,17 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+        A71000000000000000000010 /* PlaybackFlowTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A71000000000000000000011;
+            buildPhases = (A71000000000000000000012, A71000000000000000000013, );
+            buildRules = ();
+            dependencies = (A71000000000000000000014, );
+            name = PlaybackFlowTests;
+            productName = PlaybackFlowTests;
+            productReference = A71000000000000000000005;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
 		B207BC6A97604C29BA48281D /* TheAgoraLA */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0F68DD0DE8AC433E9785C62E /* Build configuration list for PBXNativeTarget "TheAgoraLA" */;
@@ -196,6 +216,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+                A71000000000000000000010 /* PlaybackFlowTests */,
 				B207BC6A97604C29BA48281D /* TheAgoraLA */,
 			);
 		};
@@ -214,10 +235,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+        A71000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A71000000000000000000003, ); runOnlyForDeploymentPostprocessing = 0; };
 		366E206C738543D097E2440B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                A71000000000000000000001 /* PromptNarrator.swift in Sources */,
 				E61000000000000000000001 /* NaturalNarrationService.swift in Sources */,
 				B202C0017A1E4A8B9C0D1E01 /* AIAccountStore.swift in Sources */,
 				B202C0017A1E4A8B9C0D1E02 /* AIAccountView.swift in Sources */,
@@ -251,7 +274,47 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXContainerItemProxy section */
+        A71000000000000000000015 = {isa = PBXContainerItemProxy; containerPortal = DC5A62A8BF4C40E5BB4EE3D0; proxyType = 1; remoteGlobalIDString = B207BC6A97604C29BA48281D; remoteInfo = TheAgoraLA; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+        A71000000000000000000014 = {isa = PBXTargetDependency; target = B207BC6A97604C29BA48281D; targetProxy = A71000000000000000000015; };
+/* End PBXTargetDependency section */
 /* Begin XCBuildConfiguration section */
+        A71000000000000000000017 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks", );
+                PRODUCT_BUNDLE_IDENTIFIER = com.theagora.la.PlaybackFlowTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TheAgoraLA.app/TheAgoraLA";
+            };
+            name = Release;
+        };
+        A71000000000000000000016 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks", );
+                PRODUCT_BUNDLE_IDENTIFIER = com.theagora.la.PlaybackFlowTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TheAgoraLA.app/TheAgoraLA";
+            };
+            name = Debug;
+        };
 		1FFD564F20884FA897397F7A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -329,6 +392,8 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
+                ENABLE_TESTABILITY = YES;
+                SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -350,6 +415,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+        A71000000000000000000011 = {isa = XCConfigurationList; buildConfigurations = (A71000000000000000000016, A71000000000000000000017, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		0F68DD0DE8AC433E9785C62E /* Build configuration list for PBXNativeTarget "TheAgoraLA" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

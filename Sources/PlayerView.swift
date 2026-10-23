@@ -98,6 +98,10 @@ struct PlayerView: View {
                                 .foregroundColor(AgoraTheme.inkOnAccent)
                                 .shadow(color: AgoraTheme.shadow, radius: 8, x: 0, y: 4)
                         }
+                        .disabled(viewModel.showPrompt)
+                        .opacity(viewModel.showPrompt ? 0.5 : 1)
+                        .accessibilityLabel(viewModel.isPlaying ? "Pause podcast" : "Play podcast")
+                        .accessibilityHint(viewModel.showPrompt ? "Use Continue in the check-in to resume the podcast." : "")
 
                         Button {
                             viewModel.skip(by: 15)
@@ -611,11 +615,11 @@ struct PlaybackSettingsView: View {
     private var feedbackDetailDescription: String {
         switch viewModel.feedbackDetailLevel {
         case .quick:
-            return "Quick: hear your grade and what you missed, then the podcast resumes automatically."
+            return "Quick: receive your grade and helpful feedback. Hands-free resumes after narration; otherwise tap Continue."
         case .balanced:
-            return "Balanced: see your grade, feedback, and the podcast's answer, then it resumes automatically."
+            return "Balanced: see your grade, feedback, and the podcast's answer. Hands-free resumes after narration; otherwise tap Continue."
         case .full:
-            return "Full: see your grade, feedback, and the podcast's answer, and continue whenever you're ready."
+            return "Full: see your grade, feedback, and the podcast's answer. Hands-free resumes after narration; otherwise tap Continue."
         }
     }
 

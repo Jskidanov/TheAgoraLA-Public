@@ -1,9 +1,31 @@
 import Foundation
+import Combine
 import Speech
 import AVFoundation
 
 @MainActor
-final class SpeechRecognitionManager: ObservableObject {
+protocol SpeechRecognizing: AnyObject {
+    var transcript: String { get }
+    var transcriptPublisher: AnyPublisher<String, Never> { get }
+    var updates: AnyPublisher<Void, Never> { get }
+    var isRecording: Bool { get }
+    var inputName: String { get }
+    var inputLevel: Double { get }
+    var hasDetectedVoice: Bool { get }
+    var lastVoiceActivityDate: Date { get }
+    var authorizationNeedsSettings: Bool { get }
+    func requestAuthorization() async -> Bool
+    func startRecording() async -> Bool
+    func finishRecording() async -> String
+    func stopRecording()
+}
+
+@MainActor
+final class SpeechRecognitionManager: ObservableObject, SpeechRecognizing {
+    var transcriptPublisher: AnyPublisher<String, Never> { $transcript.eraseToAnyPublisher() }
+    var updates: AnyPublisher<Void, Never> { objectWillChange.eraseToAnyPublisher() }
+    func stopRecording() { stopRecording(restorePlaybackSession: true) }
+
     @Published private(set) var transcript: String = ""
     @Published private(set) var isRecording: Bool = false
     @Published private(set) var inputName: String = "Microphone"
@@ -168,7 +190,7 @@ final class SpeechRecognitionManager: ObservableObject {
         }
     }
 
-    func stopRecording(restorePlaybackSession: Bool = true) {
+    func stopRecording(restorePlaybackSession: Bool) {
         recordingStartID = UUID()
         stopAudioCapture()
         recognitionSessionID = UUID()
@@ -207,6 +229,7 @@ final class SpeechRecognitionManager: ObservableObject {
     }
 
     private func clearRecognitionResources(restorePlaybackSession: Bool = true) {
+        recognitionSessionID = UUID()
         recognitionTask?.cancel()
         recognitionTask = nil
         request = nil

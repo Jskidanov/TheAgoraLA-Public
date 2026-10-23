@@ -70,15 +70,14 @@ final class PlayerViewModel: NSObject, ObservableObject {
     @Published private(set) var encounteredPromptIDs: [UUID] = []
 
     let audioManager = AudioPlayerManager()
-    let speechManager = SpeechRecognitionManager()
-    let aiService = AIService()
-    private let speechSynthesizer = AVSpeechSynthesizer()
-    private var naturalNarrationPlayer: AVAudioPlayer?
-    private var naturalNarrationTask: Task<Void, Never>?
+    let speechManager: any SpeechRecognizing
+    private let aiService: any AnswerEvaluating
+    private let narrator: any PromptNarrating
+    private let now: () -> Date
+    private var narrationID: UUID?
+    private var narrationTask: Task<Void, Never>?
     private var narrationPrefetchTask: Task<Void, Never>?
     private var narrationPrefetchSignature: String?
-    private var activeNaturalNarrationID: UUID?
-    private var activeNaturalNarrationState: DrivingPromptState?
     private var cancellables = Set<AnyCancellable>()
 
     private var promptedIDs = Set<UUID>()
@@ -88,22 +87,19 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private let nowPlaying = NowPlayingManager.shared
     private weak var pointsStore: PointsStore?
     private var silenceWatchTask: Task<Void, Never>?
-    private var speechWatchdogTask: Task<Void, Never>?
     private var transcriptUpdateDate = Date()
     private var listeningStartDate = Date()
     private var emptyListeningRetryCount = 0
-    private var activeSpeechUtterance: AVSpeechUtterance?
-    private var activeSpeechState: DrivingPromptState?
     private var microphoneStartRetryCount = 0
     private var handsFreePausedForInterruption = false
     private var shouldResumeFeedbackAfterInterruption = false
+    private var audioInterruptionActive = false
     private var pendingPlaybackRestore: (episodeID: UUID, position: Double)?
     private var lastPersistedEpisodeID: UUID?
     private var lastPersistedPosition = 0.0
     private var lastPlaybackPositionWrite = Date.distantPast
     private var isChangingEpisode = false
     private var isApplyingPlaybackRestore = false
-    private var autoContinueTask: Task<Void, Never>?
     private var evaluationID: UUID?
     private static let narrationVoiceKey = "TheAgoraLA.NarrationVoice"
     // ".v2" avoids reinterpreting an old saved rawValue under the 3-case scheme (old 1 meant full, new 1 means balanced).
@@ -111,7 +107,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private static let answerAnalysisDepthKey = "TheAgoraLA.AnswerAnalysisDepth"
     private static let playbackPositionKeyPrefix = "TheAgoraLA.PlaybackPosition."
 
-    override init() {
+    init(
+        speechManager: (any SpeechRecognizing)? = nil,
+        aiService: any AnswerEvaluating = AIService(),
+        narrator: (any PromptNarrating)? = nil,
+        now: @escaping () -> Date = Date.init
+    ) {
+        let speechManager = speechManager ?? SpeechRecognitionManager()
+        self.speechManager = speechManager
+        self.aiService = aiService
+        self.narrator = narrator ?? PromptNarrator()
+        self.now = now
         let voiceOptions = Self.makeNarrationVoiceOptions()
         narrationVoiceOptions = voiceOptions
         let savedVoiceID = UserDefaults.standard.string(forKey: Self.narrationVoiceKey)
@@ -131,7 +137,6 @@ final class PlayerViewModel: NSObject, ObservableObject {
             answerAnalysisDepth = .deepest
         }
         super.init()
-        speechSynthesizer.delegate = self
         loadPromptHistory(for: episode)
         if !episode.audioURL.isFileURL {
             audioManager.load(url: episode.audioURL)
@@ -188,15 +193,20 @@ final class PlayerViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
 
-        speechManager.$transcript
+        speechManager.transcriptPublisher
             .receive(on: RunLoop.main)
             .sink { [weak self] text in
                 guard let self else { return }
-                guard self.drivingModeEnabled else { return }
-                guard self.drivingPromptState == .listening else { return }
+                guard self.showPrompt, text == self.speechManager.transcript else { return }
+                guard self.drivingModeEnabled ? self.drivingPromptState == .listening : self.speechManager.isRecording else { return }
                 self.answerText = text
-                self.transcriptUpdateDate = Date()
+                self.transcriptUpdateDate = self.now()
             }
+            .store(in: &cancellables)
+
+        speechManager.updates
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
@@ -242,9 +252,10 @@ final class PlayerViewModel: NSObject, ObservableObject {
         interactiveModeEnabled = true
         handsFreeNeedsSettings = false
         drivingStatusText = "Preparing microphone access..."
+        let authorizationSession = promptSessionGeneration
         Task {
             let authorized = await speechManager.requestAuthorization()
-            guard drivingModeEnabled else { return }
+            guard drivingModeEnabled, promptSessionGeneration == authorizationSession else { return }
             guard authorized else {
                 drivingModeEnabled = false
                 handsFreeNeedsSettings = speechManager.authorizationNeedsSettings
@@ -295,6 +306,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 isChangingEpisode = true
                 preparePlaybackRestore(for: updated)
                 audioManager.load(url: updated.audioURL)
+                audioManager.setPlaybackHeld(showPrompt)
                 isChangingEpisode = false
                 PlayerDurationCache.shared.duration = 0
             }
@@ -321,8 +333,6 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
         promptSessionGeneration = UUID()
         isEvaluating = false
-        autoContinueTask?.cancel()
-        autoContinueTask = nil
         audioManager.setPlaybackHeld(true)
         cancelDrivingFlow()
         // Also invalidate a microphone start that is still awaiting permission.
@@ -374,13 +384,10 @@ final class PlayerViewModel: NSObject, ObservableObject {
         }
     }
 
-    /// Play must always work. A question on screen is closed exactly as Continue closes it,
-    /// and a playback hold left behind without a visible question is released.
+    /// A media Play command must not implicitly skip a question or cut off feedback.
+    /// Continue remains the explicit way to leave an active check-in.
     func play() {
-        if showPrompt, activePrompt != nil {
-            continuePlayback()
-            return
-        }
+        if showPrompt, activePrompt != nil { return }
         audioManager.setPlaybackHeld(false)
         prefetchUpcomingPromptNarration()
         audioManager.play()
@@ -543,8 +550,11 @@ final class PlayerViewModel: NSObject, ObservableObject {
         guard let prompt = activePrompt, let saved = promptResponses[prompt.id] else { return }
         guard saved.answer.trimmingCharacters(in: .whitespacesAndNewlines)
             != answerText.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-        autoContinueTask?.cancel()
-        autoContinueTask = nil
+        if drivingPromptState == .speakingFeedback {
+            cancelActiveNarration()
+            drivingPromptState = .idle
+            drivingStatusText = "Your answer changed. Submit it again when you're ready."
+        }
         feedbackText = ""
         hasScoredActivePrompt = false
     }
@@ -633,29 +643,19 @@ final class PlayerViewModel: NSObject, ObservableObject {
             pointsStore.add(points: newlyEarnedPoints)
         }
         if drivingModeEnabled {
-            drivingPromptState = .speakingFeedback
-            drivingStatusText = "Reading feedback..."
-            speak(text: spokenFeedback(for: result))
-        } else if feedbackDetailLevel != .full {
-            scheduleAutoContinue(for: prompt.id, afterSeconds: feedbackDetailLevel == .quick ? 1.6 : 4.5)
-        }
-    }
-
-    private func scheduleAutoContinue(for promptID: UUID, afterSeconds: Double) {
-        autoContinueTask?.cancel()
-        autoContinueTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(afterSeconds * 1_000_000_000))
-            guard let self, !Task.isCancelled else { return }
-            guard self.activePrompt?.id == promptID, self.hasScoredActivePrompt, self.showPrompt else { return }
-            self.continuePlayback()
+            if audioInterruptionActive {
+                shouldResumeFeedbackAfterInterruption = true
+                drivingPromptState = .idle
+                drivingStatusText = "Feedback is ready. Audio is paused for another audio session."
+            } else {
+                replayFeedbackNarration()
+            }
         }
     }
 
     func continuePlayback() {
         evaluationID = nil
         isEvaluating = false
-        autoContinueTask?.cancel()
-        autoContinueTask = nil
         saveActiveDraft()
         cancelDrivingFlow()
         showPrompt = false
@@ -666,11 +666,18 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     func toggleRecording() {
+        let recordingSession = promptSessionGeneration
         if speechManager.isRecording {
-            speechManager.stopRecording()
+            Task {
+                let transcript = await speechManager.finishRecording()
+                guard promptSessionGeneration == recordingSession, showPrompt else { return }
+                answerText = transcript
+            }
         } else {
             Task {
-                if await speechManager.startRecording() == false {
+                let started = await speechManager.startRecording()
+                guard promptSessionGeneration == recordingSession, showPrompt else { return }
+                if !started {
                     drivingStatusText = "Microphone and speech access are required for voice answers."
                 }
             }
@@ -699,6 +706,17 @@ final class PlayerViewModel: NSObject, ObservableObject {
         drivingStatusText = "Feedback stopped. Review it below or continue the podcast."
     }
 
+    func replayFeedbackNarration() {
+        guard drivingModeEnabled, showPrompt, hasScoredActivePrompt, !feedbackText.isEmpty,
+              !audioInterruptionActive else { return }
+        shouldResumeFeedbackAfterInterruption = false
+        drivingPromptState = .speakingFeedback
+        drivingStatusText = "Reading feedback..."
+        speak(text: spokenFeedback(for: AIResult(
+            score: lastScore, grade: lastGrade, feedback: feedbackText, awardedPoints: lastAwardedPoints
+        )))
+    }
+
     func previewNarrationVoice() {
         guard drivingPromptState == .idle else { return }
         speak(text: "Welcome to The Agora. I’ll pause at important moments, listen to your answer, and help you reflect on what you heard.")
@@ -718,17 +736,18 @@ final class PlayerViewModel: NSObject, ObservableObject {
         guard showPrompt else { return }
         guard activePrompt != nil else { return }
 
-        speechWatchdogTask?.cancel()
         drivingPromptState = .listening
         drivingStatusText = "Connecting to microphone..."
         answerText = ""
-        transcriptUpdateDate = Date()
-        listeningStartDate = Date()
+        transcriptUpdateDate = now()
+        listeningStartDate = now()
 
+        let listeningSession = promptSessionGeneration
         // Give the audio route a moment to move from text-to-speech to microphone input.
         try? await Task.sleep(nanoseconds: 400_000_000)
-        guard drivingModeEnabled, showPrompt, drivingPromptState == .listening else { return }
+        guard !Task.isCancelled, promptSessionGeneration == listeningSession, drivingModeEnabled, showPrompt, drivingPromptState == .listening else { return }
         var started = await speechManager.startRecording()
+        guard promptSessionGeneration == listeningSession else { return }
         guard !Task.isCancelled, drivingModeEnabled, showPrompt, drivingPromptState == .listening else {
             speechManager.stopRecording()
             return
@@ -737,9 +756,10 @@ final class PlayerViewModel: NSObject, ObservableObject {
             microphoneStartRetryCount += 1
             drivingStatusText = "Reconnecting to the microphone..."
             try? await Task.sleep(nanoseconds: 700_000_000)
-            guard drivingModeEnabled, showPrompt, drivingPromptState == .listening else { return }
+            guard !Task.isCancelled, promptSessionGeneration == listeningSession, drivingModeEnabled, showPrompt, drivingPromptState == .listening else { return }
             started = await speechManager.startRecording()
         }
+        guard promptSessionGeneration == listeningSession else { return }
         guard !Task.isCancelled, drivingModeEnabled, showPrompt, drivingPromptState == .listening else {
             speechManager.stopRecording()
             return
@@ -751,14 +771,13 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 handsFreeNeedsSettings = true
                 drivingStatusText = "Microphone and Speech Recognition access must be enabled in Settings."
             } else {
-                drivingPromptState = .speakingFeedback
-                drivingStatusText = "Microphone unavailable. Continuing playback..."
-                speak(text: "I couldn't connect to the microphone. I'll continue the podcast, and you can revisit this question later.")
+                drivingPromptState = .idle
+                drivingStatusText = "Microphone unavailable. The podcast is paused. Tap the microphone to retry, or turn off hands-free to type an answer."
             }
             return
         }
         microphoneStartRetryCount = 0
-        listeningStartDate = Date()
+        listeningStartDate = now()
         drivingStatusText = "Listening on \(speechManager.inputName)..."
         drivingStatusText += " Pause to submit; up to 90 seconds per answer."
         startSilenceWatch()
@@ -771,7 +790,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 guard !Task.isCancelled, drivingModeEnabled, drivingPromptState == .listening, showPrompt else { return }
                 let transcript = speechManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-                let listenTime = Date().timeIntervalSince(listeningStartDate)
+                let listenTime = now().timeIntervalSince(listeningStartDate)
 
                 if transcript.isEmpty {
                     if !speechManager.isRecording {
@@ -780,10 +799,12 @@ final class PlayerViewModel: NSObject, ObservableObject {
                         return
                     }
                     if listenTime >= 15, !speechManager.hasDetectedVoice {
+                        silenceWatchTask = nil
                         await handleEmptyListeningAttempt()
                         return
                     }
                     if listenTime >= 25, speechManager.hasDetectedVoice {
+                        silenceWatchTask = nil
                         await handleEmptyListeningAttempt()
                         return
                     }
@@ -791,18 +812,14 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 }
 
                 if !speechManager.isRecording {
-                    if transcript.isEmpty {
-                        await handleEmptyListeningAttempt()
-                    } else {
-                        // Release the watcher handle without cancelling the task that performs grading.
-                        silenceWatchTask = nil
-                        await stopListeningAndSubmitIfPossible()
-                    }
+                    // Release the watcher handle without cancelling the task that performs grading.
+                    silenceWatchTask = nil
+                    await stopListeningAndSubmitIfPossible()
                     return
                 }
 
                 let latestActivity = max(transcriptUpdateDate, speechManager.lastVoiceActivityDate)
-                let silence = Date().timeIntervalSince(latestActivity)
+                let silence = now().timeIntervalSince(latestActivity)
                 if (silence >= 3.5 && listenTime >= 3.5) || listenTime >= 90 {
                     // Cancelling this task here would also cancel its URLSession grading request.
                     silenceWatchTask = nil
@@ -862,6 +879,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
             speechManager.stopRecording()
         }
         silenceWatchTask?.cancel()
+        silenceWatchTask = nil
 
         if emptyListeningRetryCount == 0, drivingModeEnabled, showPrompt {
             emptyListeningRetryCount += 1
@@ -869,9 +887,8 @@ final class PlayerViewModel: NSObject, ObservableObject {
             drivingStatusText = "No answer heard. Trying once more..."
             speak(text: "I didn't hear an answer. Please try again now.")
         } else {
-            drivingPromptState = .speakingFeedback
-            drivingStatusText = "No answer heard. Continuing playback..."
-            speak(text: "I couldn't hear an answer, so I'll continue the podcast. You can revisit this prompt later.")
+            drivingPromptState = .idle
+            drivingStatusText = "No answer heard. The podcast is paused. Tap the microphone when you're ready, or turn off hands-free to type an answer."
         }
     }
 
@@ -894,20 +911,21 @@ final class PlayerViewModel: NSObject, ObservableObject {
             "say the question again",
             "ask the question again",
             "can you repeat",
-            "could you repeat"
-        ].contains(where: { normalized.contains($0) }) {
+            "could you repeat",
+            "can you repeat the question",
+            "could you repeat the question",
+            "please repeat the question"
+        ].contains(normalized) {
             return .repeatQuestion
         }
 
         if ["start over", "start my answer over", "erase my answer", "let me try again"]
-            .contains(where: { normalized.contains($0) }) {
+            .contains(normalized) {
             return .startOver
         }
 
-        let wordCount = normalized.split(whereSeparator: { $0.isWhitespace }).count
-        if wordCount <= 7,
-           ["skip this question", "skip the question", "continue the podcast", "move on"]
-            .contains(where: { normalized.contains($0) }) {
+        if ["skip this question", "skip the question", "continue the podcast", "move on", "please skip this question"]
+            .contains(normalized) {
             return .skipQuestion
         }
         return nil
@@ -920,7 +938,7 @@ final class PlayerViewModel: NSObject, ObservableObject {
     func appDidBecomeActive() {
         Task { await CloudAnalysisClient.retryAcknowledgements() }
         restorePlaybackPositionIfReady(duration: audioManager.duration)
-        guard handsFreePausedForInterruption else { return }
+        guard handsFreePausedForInterruption, !audioInterruptionActive else { return }
         handsFreePausedForInterruption = false
         guard drivingModeEnabled, showPrompt, let activePrompt else { return }
         beginDrivingFlow(for: activePrompt)
@@ -934,17 +952,20 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
         switch type {
         case .began:
+            audioInterruptionActive = true
             switch drivingPromptState {
             case .announcingPrompt, .listening, .retryingListening:
+                promptSessionGeneration = UUID()
                 handsFreePausedForInterruption = true
                 silenceWatchTask?.cancel()
                 silenceWatchTask = nil
-                speechWatchdogTask?.cancel()
-                speechWatchdogTask = nil
                 speechManager.stopRecording()
                 cancelActiveNarration()
                 drivingPromptState = .idle
                 drivingStatusText = "Hands-free paused for another audio session."
+            case .submitting:
+                shouldResumeFeedbackAfterInterruption = true
+                drivingStatusText = "Finishing your answer. Feedback will wait for the audio interruption to end."
             case .speakingFeedback:
                 shouldResumeFeedbackAfterInterruption = true
                 cancelActiveNarration()
@@ -954,19 +975,15 @@ final class PlayerViewModel: NSObject, ObservableObject {
                 break
             }
         case .ended:
-            if shouldResumeFeedbackAfterInterruption,
-               activePrompt != nil,
-               hasScoredActivePrompt {
+            audioInterruptionActive = false
+            let options = (info[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
+            guard options.contains(.shouldResume) else {
+                handsFreePausedForInterruption = false
                 shouldResumeFeedbackAfterInterruption = false
-                let result = AIResult(
-                    score: lastScore,
-                    grade: lastGrade,
-                    feedback: feedbackText,
-                    awardedPoints: lastAwardedPoints
-                )
-                drivingPromptState = .speakingFeedback
-                drivingStatusText = "Reading feedback..."
-                speak(text: spokenFeedback(for: result))
+                return
+            }
+            if shouldResumeFeedbackAfterInterruption, hasScoredActivePrompt {
+                replayFeedbackNarration()
             } else {
                 appDidBecomeActive()
             }
@@ -976,23 +993,22 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     private func cancelDrivingFlow() {
+        promptSessionGeneration = UUID()
+        evaluationID = nil
+        isEvaluating = false
         silenceWatchTask?.cancel()
         silenceWatchTask = nil
-        speechWatchdogTask?.cancel()
-        speechWatchdogTask = nil
-        if speechManager.isRecording {
-            speechManager.stopRecording()
-        }
+        speechManager.stopRecording()
         drivingPromptState = .idle
         drivingStatusText = ""
         handsFreePausedForInterruption = false
         shouldResumeFeedbackAfterInterruption = false
+        audioInterruptionActive = false
         cancelActiveNarration()
     }
 
     private func activatePrompt(_ prompt: Prompt, beginDriving: Bool) {
-        evaluationID = nil
-        isEvaluating = false
+        cancelDrivingFlow()
         audioManager.setPlaybackHeld(true)
         markPromptEncountered(prompt)
         activePrompt = prompt
@@ -1185,200 +1201,55 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 
     private func speak(text: String, persist: Bool = false) {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         cancelActiveNarration()
-
-        let expectedState = drivingPromptState
-        if selectedNarrationVoiceID == NarrationVoiceOption.automaticID {
-            let permitsNetwork = AIProcessingConsent.isAllowed()
-            startNaturalNarration(
-                text: text, apiKey: permitsNetwork ? AIAccountStore.apiKey() : nil,
-                expectedState: expectedState, persist: persist
-            )
-        } else {
-            startOnDeviceNarration(text: text, expectedState: expectedState)
-        }
-    }
-
-    private func startNaturalNarration(
-        text: String,
-        apiKey: String?,
-        expectedState: DrivingPromptState,
-        persist: Bool
-    ) {
-        let narrationID = UUID()
-        activeNaturalNarrationID = narrationID
-        activeNaturalNarrationState = expectedState
-
-        switch expectedState {
-        case .speakingFeedback:
-            drivingStatusText = "Preparing natural feedback voice..."
-        case .announcingPrompt, .retryingListening:
-            drivingStatusText = "Preparing natural voice..."
-        default:
-            break
-        }
-
-        naturalNarrationTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let data = try await NaturalNarrationService.shared.audio(for: text, apiKey: apiKey, persist: persist)
-                try Task.checkCancellation()
-                guard self.activeNaturalNarrationID == narrationID,
-                      self.activeNaturalNarrationState == expectedState,
-                      self.drivingPromptState == expectedState else { return }
-                do {
-                    try self.playNaturalNarration(data, narrationID: narrationID, expectedState: expectedState)
-                } catch NaturalNarrationError.invalidAudio {
-                    await NaturalNarrationService.shared.discardAudio(for: text)
-                    throw NaturalNarrationError.invalidAudio
-                }
-                self.naturalNarrationTask = nil
-                if expectedState == .speakingFeedback {
-                    self.drivingStatusText = "Reading feedback..."
-                } else if expectedState == .announcingPrompt || expectedState == .retryingListening {
-                    self.drivingStatusText = "Reading prompt..."
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                guard self.activeNaturalNarrationID == narrationID,
-                      self.activeNaturalNarrationState == expectedState,
-                      self.drivingPromptState == expectedState else { return }
-                self.activeNaturalNarrationID = nil
-                self.activeNaturalNarrationState = nil
-                self.naturalNarrationTask = nil
-                // Never silently replace the natural narrator with a basic robotic voice.
-                if let voice = Self.rankedEnglishVoices(AVSpeechSynthesisVoice.speechVoices())
-                    .first(where: { $0.quality == .premium || $0.quality == .enhanced }) {
-                    self.startOnDeviceNarration(text: text, expectedState: expectedState, voice: voice)
-                    self.drivingStatusText = "Natural voice unavailable. Reading with your downloaded \(Self.qualityName(voice.quality).lowercased()) voice."
-                } else {
+        let id = UUID()
+        narrationID = id
+        let session = promptSessionGeneration
+        let state = drivingPromptState
+        narrator.speak(
+            text: text, persist: persist,
+            preferNatural: selectedNarrationVoiceID == NarrationVoiceOption.automaticID,
+            voice: selectedNarrationVoice(),
+            status: { [weak self] message in
+                guard let self, self.narrationID == id else { return }
+                self.drivingStatusText = message
+            },
+            completion: { [weak self] result in
+                guard let self, self.narrationID == id,
+                      self.promptSessionGeneration == session,
+                      self.drivingPromptState == state else { return }
+                self.narrationID = nil
+                switch result {
+                case .success:
+                    self.narrationTask = Task { [weak self] in
+                        await self?.advanceAfterSpeech(from: state, session: session)
+                    }
+                case .failure(let error):
                     self.drivingPromptState = .idle
-                    self.drivingStatusText = "Natural voice unavailable. \(error.localizedDescription) Tap the microphone to retry the question, or continue using the text."
+                    self.drivingStatusText = "Narration unavailable. \(error.localizedDescription) Review the text, then continue when you're ready."
                 }
             }
-        }
-    }
-
-    private func playNaturalNarration(
-        _ data: Data,
-        narrationID: UUID,
-        expectedState: DrivingPromptState
-    ) throws {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [])
-            try session.setActive(true, options: [])
-        } catch {
-            throw NaturalNarrationError.unavailable
-        }
-
-        let player: AVAudioPlayer
-        do {
-            player = try AVAudioPlayer(data: data)
-        } catch {
-            throw NaturalNarrationError.invalidAudio
-        }
-        player.delegate = self
-        player.volume = 1
-        guard player.prepareToPlay() else { throw NaturalNarrationError.invalidAudio }
-        guard player.play() else {
-            throw NaturalNarrationError.unavailable
-        }
-        naturalNarrationPlayer = player
-        activeNaturalNarrationID = narrationID
-        activeNaturalNarrationState = expectedState
-    }
-
-    private func startOnDeviceNarration(text: String, expectedState: DrivingPromptState, voice: AVSpeechSynthesisVoice? = nil) {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [])
-            try session.setActive(true, options: [])
-        } catch {}
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice ?? selectedNarrationVoice()
-        utterance.rate = 0.47
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 1.0
-        utterance.preUtteranceDelay = 0.12
-        utterance.postUtteranceDelay = 0.22
-        activeSpeechUtterance = utterance
-        activeSpeechState = expectedState
-        speechSynthesizer.speak(utterance)
-        startSpeechWatchdog(for: expectedState, utterance: utterance)
+        )
     }
 
     private func cancelActiveNarration() {
-        naturalNarrationTask?.cancel()
-        naturalNarrationTask = nil
-        activeNaturalNarrationID = nil
-        activeNaturalNarrationState = nil
-        naturalNarrationPlayer?.delegate = nil
-        naturalNarrationPlayer?.stop()
-        naturalNarrationPlayer = nil
-
-        speechWatchdogTask?.cancel()
-        speechWatchdogTask = nil
-        activeSpeechUtterance = nil
-        activeSpeechState = nil
-        if speechSynthesizer.isSpeaking {
-            speechSynthesizer.stopSpeaking(at: .immediate)
-        }
+        narrationID = nil
+        narrationTask?.cancel()
+        narrationTask = nil
+        narrator.stop()
     }
 
-    private func startSpeechWatchdog(
-        for expectedState: DrivingPromptState,
-        utterance: AVSpeechUtterance
-    ) {
-        speechWatchdogTask?.cancel()
-
-        speechWatchdogTask = Task { @MainActor in
-            let earliestRecovery = Date().addingTimeInterval(3)
-            var consecutiveStoppedChecks = 0
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                guard !Task.isCancelled else { return }
-                guard drivingModeEnabled, showPrompt, drivingPromptState == expectedState else { return }
-                guard activeSpeechUtterance === utterance else { return }
-
-                if speechSynthesizer.isSpeaking {
-                    consecutiveStoppedChecks = 0
-                    continue
-                }
-                guard Date() >= earliestRecovery else { continue }
-
-                consecutiveStoppedChecks += 1
-                if consecutiveStoppedChecks >= 3 {
-                    activeSpeechUtterance = nil
-                    activeSpeechState = nil
-                    speechWatchdogTask = nil
-                    await advanceAfterSpeech(from: expectedState)
-                    return
-                }
-            }
-        }
-    }
-
-    private func advanceAfterSpeech(from completedState: DrivingPromptState) async {
-        guard drivingModeEnabled, showPrompt, drivingPromptState == completedState else { return }
-        speechWatchdogTask?.cancel()
-        speechWatchdogTask = nil
-
+    private func advanceAfterSpeech(from completedState: DrivingPromptState, session: UUID) async {
+        guard !Task.isCancelled, promptSessionGeneration == session,
+              drivingModeEnabled, showPrompt, drivingPromptState == completedState else { return }
         switch completedState {
         case .announcingPrompt, .retryingListening:
             await startListening()
         case .speakingFeedback:
-            // Let the spoken-audio route settle before releasing the podcast playback hold.
+            // Only an explicit successful completion can release the playback hold.
             try? await Task.sleep(nanoseconds: 300_000_000)
-            guard drivingModeEnabled,
-                  showPrompt,
-                  drivingPromptState == completedState,
-                  !speechSynthesizer.isSpeaking,
-                  activeSpeechUtterance == nil,
-                  naturalNarrationPlayer?.isPlaying != true,
-                  naturalNarrationTask == nil else { return }
+            guard !Task.isCancelled, promptSessionGeneration == session,
+                  drivingModeEnabled, showPrompt, drivingPromptState == completedState else { return }
             continuePlayback()
         default:
             break
@@ -1387,7 +1258,6 @@ final class PlayerViewModel: NSObject, ObservableObject {
 
     private func spokenFeedback(for result: AIResult) -> String {
         let scoreDescription = "You scored \(result.score) out of 100."
-        guard feedbackDetailLevel != .quick else { return scoreDescription }
         return "\(scoreDescription) \(result.feedback)"
     }
 
@@ -1480,35 +1350,6 @@ final class PlayerViewModel: NSObject, ObservableObject {
     }
 }
 
-extension PlayerViewModel: AVSpeechSynthesizerDelegate {
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard self.activeSpeechUtterance === utterance,
-                  let completedState = self.activeSpeechState else { return }
-            self.activeSpeechUtterance = nil
-            self.activeSpeechState = nil
-            await self.advanceAfterSpeech(from: completedState)
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard self.activeSpeechUtterance === utterance,
-                  let completedState = self.activeSpeechState else { return }
-            self.speechWatchdogTask?.cancel()
-            self.speechWatchdogTask = nil
-            self.activeSpeechUtterance = nil
-            self.activeSpeechState = nil
-            self.drivingPromptState = .idle
-            self.drivingStatusText = completedState == .speakingFeedback
-                ? "Feedback narration stopped. Review it below, then continue when you're ready."
-                : "Narration stopped. Tap the microphone to try again."
-        }
-    }
-}
-
 @MainActor
 private final class AnswerGradingBackgroundLease {
     private var identifier: UIBackgroundTaskIdentifier = .invalid
@@ -1523,38 +1364,5 @@ private final class AnswerGradingBackgroundLease {
         guard identifier != .invalid else { return }
         UIApplication.shared.endBackgroundTask(identifier)
         identifier = .invalid
-    }
-}
-
-extension PlayerViewModel: AVAudioPlayerDelegate {
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor [weak self] in
-            guard let self,
-                  self.naturalNarrationPlayer === player,
-                  let completedState = self.activeNaturalNarrationState else { return }
-            self.naturalNarrationPlayer?.delegate = nil
-            self.naturalNarrationPlayer = nil
-            self.activeNaturalNarrationID = nil
-            self.activeNaturalNarrationState = nil
-
-            guard flag else {
-                self.drivingPromptState = .idle
-                self.drivingStatusText = "Narration stopped. Review the text, then continue when you're ready."
-                return
-            }
-            await self.advanceAfterSpeech(from: completedState)
-        }
-    }
-
-    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        Task { @MainActor [weak self] in
-            guard let self, self.naturalNarrationPlayer === player else { return }
-            self.naturalNarrationPlayer?.delegate = nil
-            self.naturalNarrationPlayer = nil
-            self.activeNaturalNarrationID = nil
-            self.activeNaturalNarrationState = nil
-            self.drivingPromptState = .idle
-            self.drivingStatusText = "Natural voice playback stopped. Review the text, then continue when you're ready."
-        }
     }
 }

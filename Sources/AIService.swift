@@ -233,7 +233,14 @@ private struct FastEpisodeAnalysisEnvelope: Decodable {
     }
 }
 
-final class AIService {
+protocol AnswerEvaluating {
+    func evaluateAnswer(
+        question: String, expectedAnswer: String, userAnswer: String,
+        transcript: String?, progressSeconds: Double?, analysisDepth: AnswerAnalysisDepth
+    ) async -> AIResult
+}
+
+final class AIService: AnswerEvaluating {
     private let personalAI = OpenRouterClient()
 
     func evaluateAnswer(

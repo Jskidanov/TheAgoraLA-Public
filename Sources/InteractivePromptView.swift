@@ -123,6 +123,10 @@ struct InteractivePromptView: View {
                             .buttonStyle(AgoraOutlineButtonStyle())
                             .accessibilityHint("Stops the narrator and keeps the written feedback on screen")
                         } else {
+                            if viewModel.hasScoredActivePrompt, viewModel.drivingPromptState == .idle {
+                                Button("Read Feedback") { viewModel.replayFeedbackNarration() }
+                                    .buttonStyle(AgoraOutlineButtonStyle())
+                            }
                             Button {
                                 viewModel.drivingMicTapped()
                             } label: {
@@ -203,12 +207,6 @@ struct InteractivePromptView: View {
                                 color: AgoraTheme.ink
                             )
                         }
-
-                        if viewModel.feedbackDetailLevel != .full, !viewModel.drivingModeEnabled {
-                            Text("Resuming the podcast...")
-                                .font(AgoraTheme.tagFont)
-                                .foregroundColor(AgoraTheme.inkMuted)
-                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -221,7 +219,7 @@ struct InteractivePromptView: View {
                     }
                     .buttonStyle(AgoraPillButtonStyle())
                     .disabled(
-                        viewModel.drivingModeEnabled
+                        (viewModel.drivingModeEnabled && viewModel.drivingPromptState != .idle)
                             || viewModel.isEvaluating
                             || !viewModel.canSubmitActiveAnswer
                     )
@@ -234,10 +232,6 @@ struct InteractivePromptView: View {
             }
         }
         .padding(.horizontal, 16)
-        .onReceive(viewModel.speechManager.$transcript) { transcript in
-            guard viewModel.speechManager.isRecording else { return }
-            viewModel.answerText = transcript
-        }
         .onChange(of: viewModel.answerText) { _ in
             viewModel.activeAnswerDidChange()
         }
