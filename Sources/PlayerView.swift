@@ -48,14 +48,6 @@ struct PlayerView: View {
                             .frame(height: 32)
                             .accessibilityLabel("Episode position")
                             .accessibilityValue(formatTime(isScrubbing ? scrubPosition : viewModel.currentTime))
-
-                        HStack {
-                            Text(formatTime(isScrubbing ? scrubPosition : viewModel.currentTime))
-                            Spacer()
-                            Text(formatTime(viewModel.duration))
-                        }
-                        .font(AgoraTheme.tagFont)
-                        .foregroundColor(AgoraTheme.inkMuted)
                     }
 
                     if let playbackError = viewModel.audioManager.playbackError {
@@ -118,6 +110,12 @@ struct PlayerView: View {
                                 )
                         }
                     }
+
+                    Text("\(formatTime(isScrubbing ? scrubPosition : viewModel.currentTime)) / \(formatTime(viewModel.duration))")
+                        .font(AgoraTheme.tagFont)
+                        .monospacedDigit()
+                        .foregroundColor(AgoraTheme.inkMuted)
+                        .padding(.top, -8)
 
                     Divider()
 
