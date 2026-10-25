@@ -117,6 +117,26 @@ struct PlayerView: View {
                         .foregroundColor(AgoraTheme.inkMuted)
                         .padding(.top, -8)
 
+                    if !scheduledPromptTimes.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(scheduledPromptTimes, id: \.id) { prompt in
+                                    let hasPassed = viewModel.currentTime >= prompt.timestampSeconds
+                                    Text(formatTime(prompt.timestampSeconds))
+                                        .font(AgoraTheme.tagFont)
+                                        .monospacedDigit()
+                                        .foregroundColor(hasPassed ? AgoraTheme.inkOnAccent : AgoraTheme.inkMuted)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(hasPassed ? playerAccent : AgoraTheme.tagBackground))
+                                        .accessibilityLabel("Check-in at \(formatTime(prompt.timestampSeconds))")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .accessibilityLabel("Check-in times")
+                    }
+
                     Divider()
 
                     HStack(spacing: 12) {
@@ -260,6 +280,12 @@ struct PlayerView: View {
             }
         }
         .padding(.horizontal, 16)
+    }
+
+    private var scheduledPromptTimes: [Prompt] {
+        viewModel.episode.prompts
+            .filter { $0.timestampSeconds.isFinite }
+            .sorted { $0.timestampSeconds < $1.timestampSeconds }
     }
 
     private func formatTime(_ seconds: Double) -> String {
