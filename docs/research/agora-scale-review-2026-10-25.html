@@ -1,0 +1,817 @@
+<title>Agora LA Scale Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: a left-aligned 68ch reading column inside a 60rem frame; figures and tables use the full frame.
+   Palette and type follow the app's own AgoraTheme: parchment ground, obsidian ink, bronze accent,
+   and lapis (the app's hands-free blue) for the listener's-own-AI path. */
+:root {
+  --paper: #faf5eb;
+  --paper-deep: #f0e8db;
+  --surface: #fdfbf7;
+  --ink: #26292e;
+  --ink-soft: #55585d;
+  --rule: #ddd2c1;
+  --bronze: #c48c3d;
+  --accent: #8f5b1a;
+  --bronze-tint: #f4e7d1;
+  --lapis: #2b6694;
+  --lapis-tint: #e2ecf4;
+  --ok: #2f6f45;
+  --ok-tint: #e1efe4;
+  --warn: #85570a;
+  --warn-tint: #f6ead0;
+  --bad: #a33a25;
+  --bad-tint: #f7e1db;
+  --font-display: "Iowan Old Style", "Source Serif 4", "Palatino Linotype", Georgia, serif;
+  --font-body: "Avenir Next", Figtree, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --measure: 68ch;
+  --frame: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1c1b18;
+    --paper-deep: #27251f;
+    --surface: #22201c;
+    --ink: #efe8dc;
+    --ink-soft: #bab2a5;
+    --rule: #3c382f;
+    --bronze: #d6a053;
+    --accent: #e3ad5c;
+    --bronze-tint: #35291a;
+    --lapis: #8dbbe3;
+    --lapis-tint: #1e2b37;
+    --ok: #8acba0;
+    --ok-tint: #1d2e23;
+    --warn: #e6bb63;
+    --warn-tint: #352a17;
+    --bad: #ee9883;
+    --bad-tint: #3b221c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1c1b18;
+  --paper-deep: #27251f;
+  --surface: #22201c;
+  --ink: #efe8dc;
+  --ink-soft: #bab2a5;
+  --rule: #3c382f;
+  --bronze: #d6a053;
+  --accent: #e3ad5c;
+  --bronze-tint: #35291a;
+  --lapis: #8dbbe3;
+  --lapis-tint: #1e2b37;
+  --ok: #8acba0;
+  --ok-tint: #1d2e23;
+  --warn: #e6bb63;
+  --warn-tint: #352a17;
+  --bad: #ee9883;
+  --bad-tint: #3b221c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+.page { padding-inline: 20px; padding-block: 3rem 4.5rem; }
+main { max-width: var(--frame); margin-inline: auto; display: grid; gap: 0; }
+main > header, main > section { display: grid; gap: 1rem; min-width: 0; }
+main > section { border-top: 1px solid var(--rule); padding-block: 2.5rem; }
+main > header { padding-block-end: 2rem; }
+p, ul, ol, dl, h1, h2, h3 { margin: 0; }
+p, li, .prose { max-width: var(--measure); }
+h1, h2 { font-family: var(--font-display); font-weight: 700; line-height: 1.12; text-wrap: balance; letter-spacing: -0.005em; }
+h1 { font-size: clamp(2.15rem, 1.55rem + 2.4vw, 3.1rem); }
+h2 { font-size: clamp(1.45rem, 1.25rem + 0.8vw, 1.75rem); }
+h3 { font-size: 1.04rem; font-weight: 600; line-height: 1.3; text-wrap: balance; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.74rem; font-weight: 500;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent);
+}
+.lede { font-size: 1.18rem; line-height: 1.5; color: var(--ink); }
+.soft { color: var(--ink-soft); }
+a { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--lapis); outline-offset: 2px; border-radius: 3px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+code { background: var(--paper-deep); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+ul, ol { padding-left: 1.3rem; display: grid; gap: 0.45rem; }
+li::marker { color: var(--ink-soft); }
+strong { font-weight: 600; }
+
+.meta {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem;
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-soft);
+}
+.meta div { display: flex; gap: 0.45rem; }
+.meta dt { color: var(--accent); }
+.meta dd { margin: 0; }
+
+.notice {
+  border: 1px solid var(--bad); background: var(--bad-tint);
+  border-radius: 10px; padding: 0.85rem 1rem; max-width: none;
+  display: grid; gap: 0.25rem;
+}
+.notice strong { color: var(--bad); }
+
+.verdict-line { font-size: 1.12rem; line-height: 1.5; }
+.findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.finding {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1rem 1.1rem 1.1rem; display: grid; gap: 0.45rem; align-content: start; min-width: 0;
+}
+.finding p { font-size: 0.98rem; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 0.4em; width: fit-content;
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em;
+  text-transform: uppercase; padding: 0.18em 0.62em; border-radius: 999px;
+  border: 1px solid currentColor; white-space: nowrap; line-height: 1.5;
+}
+.chip::before { content: ""; width: 0.5em; height: 0.5em; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ok); background: var(--ok-tint); }
+.chip.warn { color: var(--warn); background: var(--warn-tint); }
+.chip.bad { color: var(--bad); background: var(--bad-tint); }
+.chip.info { color: var(--lapis); background: var(--lapis-tint); }
+
+nav.toc {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; font-size: 0.92rem;
+  padding-block: 0.25rem;
+}
+nav.toc span { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; align-self: center; }
+
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem 2rem; }
+.facts div { display: grid; gap: 0.15rem; min-width: 0; }
+.facts dt { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.facts dd { margin: 0; font-size: 0.98rem; }
+
+figure { margin: 0; display: grid; gap: 0.65rem; min-width: 0; }
+.fig-scroll {
+  overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px;
+  background: var(--surface); padding: 1rem;
+}
+.fig-scroll svg { display: block; width: 100%; min-width: 50rem; height: auto; color: var(--ink); }
+figcaption { font-size: 0.92rem; color: var(--ink-soft); max-width: var(--measure); }
+
+/* Diagram classes: the SVGs carry no styles of their own. */
+.d-box { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.d-box-soft { fill: var(--paper-deep); stroke: var(--rule); stroke-width: 1; }
+.d-box-lapis { fill: var(--lapis-tint); stroke: var(--lapis); stroke-width: 1.4; }
+.d-line { fill: none; stroke: var(--ink); stroke-width: 1.3; }
+.d-line-soft { fill: none; stroke: var(--ink-soft); stroke-width: 1.1; stroke-dasharray: 4 4; }
+.d-line-bad { fill: none; stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.d-line-key { fill: none; stroke: var(--bronze); stroke-width: 2; }
+.d-line-lapis { fill: none; stroke: var(--lapis); stroke-width: 2.4; }
+.d-head { fill: var(--ink); }
+.d-head-bad { fill: var(--bad); }
+.d-head-key { fill: var(--bronze); }
+.d-head-lapis { fill: var(--lapis); }
+.d-t { fill: var(--ink); font-family: var(--font-body); font-size: 12.5px; }
+.d-tb { fill: var(--ink); font-family: var(--font-body); font-size: 13.5px; font-weight: 600; }
+.d-ts { fill: var(--ink-soft); font-family: var(--font-body); font-size: 11.5px; }
+.d-tm { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 11px; }
+.d-t-bad { fill: var(--bad); font-family: var(--font-body); font-size: 12px; font-weight: 600; }
+.d-t-key { fill: var(--accent); font-family: var(--font-body); font-size: 12px; font-weight: 600; }
+.d-t-lapis { fill: var(--lapis); font-family: var(--font-body); font-size: 12px; font-weight: 600; }
+.d-tm-lapis { fill: var(--lapis); font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.d-title { fill: var(--ink); font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+.d-seg-a { fill: var(--surface); stroke: var(--rule); stroke-width: 1; }
+.d-seg-b { fill: var(--paper-deep); stroke: var(--rule); stroke-width: 1; }
+.d-evidence { fill: var(--bronze-tint); stroke: var(--bronze); stroke-width: 1.4; }
+.d-axis { stroke: var(--ink-soft); stroke-width: 1; }
+.d-checkin { stroke: var(--lapis); stroke-width: 2.4; }
+.d-dot-lapis { fill: var(--lapis); }
+.d-divider { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 3 5; }
+
+ol.steps { counter-reset: step; list-style: none; padding-left: 0; gap: 0.75rem; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 0.2rem 0.6rem; max-width: var(--measure); }
+ol.steps > li::before {
+  content: counter(step); grid-row: 1 / span 2; font-family: var(--font-mono); font-size: 0.8rem;
+  width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--rule); color: var(--accent); background: var(--surface); margin-top: 0.1rem;
+}
+ol.steps > li strong { display: block; }
+
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 2rem; }
+.split > div { display: grid; gap: 0.6rem; align-content: start; min-width: 0; }
+.split h3 { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 42rem; font-size: 0.93rem; line-height: 1.45; }
+th, td { text-align: left; padding: 0.62rem 0.8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+thead th {
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-soft); background: var(--paper-deep); white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.86rem; }
+td.name { font-weight: 600; }
+tr.current td { background: var(--bronze-tint); }
+td .sub { display: block; color: var(--ink-soft); font-size: 0.85rem; font-weight: 400; }
+.table-note { font-size: 0.88rem; color: var(--ink-soft); max-width: var(--measure); }
+
+.callout {
+  border-left: 3px solid var(--lapis); background: var(--lapis-tint);
+  padding: 0.85rem 1rem; border-radius: 0 8px 8px 0; max-width: var(--measure); display: grid; gap: 0.35rem;
+}
+.callout.bronze { border-left-color: var(--bronze); background: var(--bronze-tint); }
+.callout .label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+
+.phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.phase { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem 1.1rem; display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
+.phase h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; }
+.phase .when { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.phase ol { font-size: 0.95rem; }
+.phase .est { display: block; font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-soft); }
+
+.sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem 2rem; font-size: 0.88rem; }
+.sources div { display: grid; gap: 0.4rem; align-content: start; min-width: 0; }
+.sources ul { gap: 0.3rem; }
+.sources li { overflow-wrap: anywhere; }
+footer.end { font-size: 0.85rem; color: var(--ink-soft); border-top: 1px solid var(--rule); padding-block: 1.5rem 0; }
+
+@media (max-width: 720px) {
+  .findings, .facts, .split, .phases, .sources { grid-template-columns: minmax(0, 1fr); }
+  .page { padding-block: 2rem 3rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="page">
+<main>
+
+<header>
+  <p class="eyebrow">Technical review · October 25, 2026</p>
+  <h1>Can The Agora LA scale?</h1>
+  <p class="lede">An evaluation of the app's code, its cost per episode, today's best transcription options, legitimate ways to get YouTube transcripts, and a design where listeners bring their own Claude or ChatGPT plan through MCP.</p>
+  <dl class="meta">
+    <div><dt>Code</dt><dd>TheAgoraLA-Public @ 572a4f6 (Oct 24)</dd></div>
+    <div><dt>App</dt><dd>iOS 1.0.2, build 5 (TestFlight)</dd></div>
+    <div><dt>Prices</dt><dd>OpenRouter live, Oct 25</dd></div>
+  </dl>
+  <div class="notice" role="note">
+    <strong>Production backend offline</strong>
+    <p>The API address in build 5 (<code>agora-api-production-0aa0.up.railway.app</code>) returned <code>404 Application not found</code> when checked on October 25. Until it is restored, single-episode imports fall back to analyzing on the phone, which must stay open for the whole run.</p>
+  </div>
+</header>
+
+<section id="verdict" aria-labelledby="verdict-h">
+  <h2 id="verdict-h">Verdict</h2>
+  <p class="verdict-line">The infrastructure can scale with modest fixes. What limits growth is the cost per episode and the onboarding step. Letting listeners bring their own AI through MCP works as a second mode that the listener starts from a chat.</p>
+  <div class="findings">
+    <article class="finding">
+      <span class="chip ok">Holds</span>
+      <h3>Infrastructure</h3>
+      <p>A Postgres job queue lets several servers share work safely, and crashed jobs restart on their own. Capacity grows by adding instances.</p>
+    </article>
+    <article class="finding">
+      <span class="chip warn">Fix first</span>
+      <h3>Cost per episode</h3>
+      <p>About $0.40–0.80 for an hour-long episode on the default tier, paid by each listener. Small current models could bring question generation down to 2–3¢.</p>
+    </article>
+    <article class="finding">
+      <span class="chip bad">Growth limit</span>
+      <h3>Onboarding</h3>
+      <p>Every listener must create and fund an OpenRouter account before the first real lesson. No server change removes that step.</p>
+    </article>
+    <article class="finding">
+      <span class="chip info">Viable with limits</span>
+      <h3>Listener's own AI over MCP</h3>
+      <p>Works when the listener starts or schedules it in Claude or ChatGPT. Agora can't drive it in real time, so grading answers during playback needs an on-device model.</p>
+    </article>
+  </div>
+  <nav class="toc" aria-label="Contents">
+    <span>Contents</span>
+    <a href="#app">What it does</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#timing">Timing</a>
+    <a href="#scale">Scale</a>
+    <a href="#cost">Cost</a>
+    <a href="#transcription">Transcription</a>
+    <a href="#media">Media sources</a>
+    <a href="#mcp">Own AI over MCP</a>
+    <a href="#path">Recommended path</a>
+    <a href="#questions">Open questions</a>
+    <a href="#sources">Sources</a>
+  </nav>
+</section>
+
+<section id="app" aria-labelledby="app-h">
+  <h2 id="app-h">What the app does</h2>
+  <p>The Agora LA is a free iOS app from a nonprofit that turns podcast listening into active recall. A listener pastes an Apple Podcasts, RSS, or audio link. The app builds a transcript, writes questions grounded in what the episode actually says, and asks each one right after the passage that answers it.</p>
+  <p>In hands-free mode, which is on by default, the app pauses the episode, reads the question aloud, listens for a spoken answer, grades it generously, reads the feedback, and resumes. Good answers earn points toward levels. There are no Agora accounts, subscriptions, or in-app purchases. Listeners connect their own OpenRouter account and pay their AI provider directly.</p>
+  <dl class="facts">
+    <div><dt>Platform</dt><dd>iOS 16 and later · SwiftUI · no third-party packages</dd></div>
+    <div><dt>Codebase</dt><dd>~12,500 lines of Swift · ~2,100 lines of TypeScript backend · small Next.js site</dd></div>
+    <div><dt>Release</dt><dd>TestFlight 1.0.2 (build 5) · an internal group plus 15 external testers</dd></div>
+    <div><dt>AI access</dt><dd>Listener's OpenRouter key from an OAuth PKCE sign-in, kept in the iPhone Keychain</dd></div>
+  </dl>
+</section>
+
+<section id="pipeline" aria-labelledby="pipeline-h">
+  <h2 id="pipeline-h">How an episode becomes a lesson</h2>
+  <figure>
+    <div class="fig-scroll">
+      <svg viewBox="0 0 900 380" role="img" aria-label="The iPhone app sends a job and an encrypted copy of the listener's key to Agora's cloud worker, which fetches the transcript or MP3 from the podcast host and calls OpenRouter models to transcribe, extract, and curate. The app polls for the result and calls OpenRouter directly for grading and narration. When the cloud is unreachable, the phone runs the whole pipeline itself.">
+        <defs>
+          <marker id="d1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head"/></marker>
+          <marker id="d1-arrow-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head-bad"/></marker>
+          <marker id="d1-arrow-key" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head-key"/></marker>
+        </defs>
+
+        <rect x="355" y="14" width="210" height="58" rx="8" class="d-box-soft"/>
+        <text x="460" y="38" text-anchor="middle" class="d-tb">Podcast host</text>
+        <text x="460" y="58" text-anchor="middle" class="d-ts">RSS feed · transcript · MP3</text>
+
+        <rect x="20" y="138" width="190" height="100" rx="10" class="d-box"/>
+        <text x="115" y="168" text-anchor="middle" class="d-tb">iPhone app</text>
+        <text x="115" y="190" text-anchor="middle" class="d-ts">import · playback</text>
+        <text x="115" y="208" text-anchor="middle" class="d-ts">check-ins · spoken answers</text>
+
+        <rect x="355" y="126" width="210" height="124" rx="10" class="d-box"/>
+        <text x="460" y="152" text-anchor="middle" class="d-tb">Agora cloud (Railway)</text>
+        <text x="460" y="176" text-anchor="middle" class="d-t">API + job worker</text>
+        <text x="460" y="196" text-anchor="middle" class="d-t">Postgres job queue</text>
+        <text x="460" y="216" text-anchor="middle" class="d-t">FFmpeg audio splitter</text>
+        <text x="460" y="237" text-anchor="middle" class="d-ts">key deleted when job ends</text>
+
+        <rect x="700" y="116" width="180" height="144" rx="10" class="d-box"/>
+        <text x="790" y="142" text-anchor="middle" class="d-tb">OpenRouter</text>
+        <text x="790" y="160" text-anchor="middle" class="d-ts">billed to listener's key</text>
+        <text x="790" y="186" text-anchor="middle" class="d-t">Whisper large-v3</text>
+        <text x="790" y="205" text-anchor="middle" class="d-t">extraction model</text>
+        <text x="790" y="224" text-anchor="middle" class="d-t">curation model</text>
+        <text x="790" y="243" text-anchor="middle" class="d-t">grading · narration</text>
+
+        <line x1="210" y1="166" x2="352" y2="166" class="d-line-key" marker-end="url(#d1-arrow-key)"/>
+        <text x="282" y="156" text-anchor="middle" class="d-t-key">job + encrypted key</text>
+        <line x1="355" y1="212" x2="213" y2="212" class="d-line" marker-end="url(#d1-arrow)"/>
+        <text x="282" y="230" text-anchor="middle" class="d-ts">result · app polls</text>
+
+        <line x1="460" y1="126" x2="460" y2="75" class="d-line" marker-end="url(#d1-arrow)"/>
+        <text x="470" y="104" class="d-ts">fetch transcript or MP3</text>
+
+        <line x1="565" y1="196" x2="697" y2="196" class="d-line" marker-end="url(#d1-arrow)"/>
+        <text x="632" y="172" text-anchor="middle" class="d-ts">transcribe</text>
+        <text x="632" y="187" text-anchor="middle" class="d-ts">extract · curate</text>
+
+        <path d="M150 238 V300 H760 V263" class="d-line" marker-end="url(#d1-arrow)"/>
+        <text x="455" y="292" text-anchor="middle" class="d-ts">grade spoken answers · read questions aloud</text>
+
+        <path d="M80 238 V352 H840 V263" class="d-line-bad" marker-end="url(#d1-arrow-bad)"/>
+        <text x="455" y="344" text-anchor="middle" class="d-t-bad">fallback when the cloud is unreachable: the whole pipeline runs on the phone (live today)</text>
+      </svg>
+    </div>
+    <figcaption>The listener's OpenRouter key pays for every AI call. A copy travels to Agora's server for each cloud job and is deleted when the job ends. With the cloud unreachable, as it is today, the phone does all of this itself.</figcaption>
+  </figure>
+  <ol class="steps">
+    <li><strong>Resolve the episode</strong><span>On the phone: an Apple Podcasts link goes through iTunes Lookup to the publisher's RSS feed and the episode's MP3.</span></li>
+    <li><strong>Get a timed transcript</strong><span>The server uses the publisher's <code>&lt;podcast:transcript&gt;</code> when it covers the episode. Otherwise it downloads the MP3 (up to 250 MB), splits it into 8-minute parts with FFmpeg, transcribes three parts at a time with Whisper large-v3, and shifts each part's timestamps onto the full timeline.</span></li>
+    <li><strong>Extract ideas</strong><span>The transcript is split into 3–12 sections by length. A model lists each section's consequential claims, each with a verbatim quote, four sections at a time.</span></li>
+    <li><strong>Verify quotes</strong><span>Any idea whose quote does not appear word for word in the transcript is dropped, along with low-importance and duplicate ideas.</span></li>
+    <li><strong>Curate questions</strong><span>One high-reasoning call writes up to 18 question and answer candidates plus a 100–170 word episode brief. Code then rejects stock wording, weak overlap between answer and evidence, and clustering, and spreads the best questions across the episode.</span></li>
+    <li><strong>Schedule check-ins</strong><span>Each question is set to play 3 seconds after its last supporting quote ends, measured against real timestamps.</span></li>
+  </ol>
+</section>
+
+<section id="timing" aria-labelledby="timing-h">
+  <h2 id="timing-h">Why timestamps decide the technology</h2>
+  <figure>
+    <div class="fig-scroll">
+      <svg viewBox="0 0 900 214" role="img" aria-label="A 40-second window of an episode, from 14:00 to 14:40, divided into transcript segments. The supporting quote spans 14:07 to 14:27. Its last segment ends at 14:28, so the check-in fires at 14:31. The model's own suggested time of 14:11 would have asked the question before the answer was heard, and is ignored.">
+        <line x1="270" y1="34" x2="270" y2="96" class="d-line-soft"/>
+        <text x="278" y="32" class="d-ts">model's guess · 14:11 · ignored</text>
+
+        <rect x="192" y="68" width="410" height="16" rx="3" class="d-evidence"/>
+        <text x="602" y="61" text-anchor="end" class="d-t-key">supporting quote · verbatim match</text>
+
+        <rect x="50" y="96" width="124" height="36" class="d-seg-a"/>
+        <rect x="174" y="96" width="154" height="36" class="d-seg-b"/>
+        <rect x="328" y="96" width="152" height="36" class="d-seg-a"/>
+        <rect x="480" y="96" width="130" height="36" class="d-seg-b"/>
+        <rect x="610" y="96" width="132" height="36" class="d-seg-a"/>
+        <rect x="742" y="96" width="108" height="36" class="d-seg-b"/>
+        <text x="112" y="118" text-anchor="middle" class="d-tm">840.0–846.2</text>
+        <text x="251" y="118" text-anchor="middle" class="d-tm">846.2–853.9</text>
+        <text x="404" y="118" text-anchor="middle" class="d-tm">853.9–861.5</text>
+        <text x="545" y="118" text-anchor="middle" class="d-tm">861.5–868.0</text>
+        <text x="676" y="118" text-anchor="middle" class="d-tm">868.0–874.6</text>
+        <text x="796" y="118" text-anchor="middle" class="d-tm">874.6–880.0</text>
+
+        <line x1="610" y1="132" x2="610" y2="152" class="d-line"/>
+        <text x="602" y="150" text-anchor="end" class="d-ts">quote's segment ends · 14:28</text>
+
+        <line x1="670" y1="40" x2="670" y2="168" class="d-checkin"/>
+        <circle cx="670" cy="40" r="5" class="d-dot-lapis"/>
+        <text x="680" y="44" class="d-t-lapis">check-in fires · 14:31</text>
+        <text x="680" y="60" class="d-ts">segment end + 3 s</text>
+
+        <line x1="50" y1="168" x2="850" y2="168" class="d-axis"/>
+        <g class="d-tm">
+          <line x1="50" y1="168" x2="50" y2="174" class="d-axis"/><text x="50" y="190" text-anchor="middle" class="d-tm">14:00</text>
+          <line x1="150" y1="168" x2="150" y2="174" class="d-axis"/><text x="150" y="190" text-anchor="middle" class="d-tm">14:05</text>
+          <line x1="250" y1="168" x2="250" y2="174" class="d-axis"/><text x="250" y="190" text-anchor="middle" class="d-tm">14:10</text>
+          <line x1="350" y1="168" x2="350" y2="174" class="d-axis"/><text x="350" y="190" text-anchor="middle" class="d-tm">14:15</text>
+          <line x1="450" y1="168" x2="450" y2="174" class="d-axis"/><text x="450" y="190" text-anchor="middle" class="d-tm">14:20</text>
+          <line x1="550" y1="168" x2="550" y2="174" class="d-axis"/><text x="550" y="190" text-anchor="middle" class="d-tm">14:25</text>
+          <line x1="650" y1="168" x2="650" y2="174" class="d-axis"/><text x="650" y="190" text-anchor="middle" class="d-tm">14:30</text>
+          <line x1="750" y1="168" x2="750" y2="174" class="d-axis"/><text x="750" y="190" text-anchor="middle" class="d-tm">14:35</text>
+          <line x1="850" y1="168" x2="850" y2="174" class="d-axis"/><text x="850" y="190" text-anchor="middle" class="d-tm">14:40</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Segments carry real times, stored as <code>[[AUDIO_SECONDS 861.50-868.00]]</code> markers. A check-in fires 3 seconds after the segment holding the end of its quote. The model's own suggested time is thrown away, because it can land before the listener has heard the answer.</figcaption>
+  </figure>
+  <p>Every later choice follows from this mechanism. Publisher captions are used only when they cover at least 90% of the episode. Server transcription rejects any 8-minute part that comes back short. A transcription service must return reliable timestamps, and a source with approximate timestamps suits an end-of-episode quiz better than check-ins during playback.</p>
+</section>
+
+<section id="scale" aria-labelledby="scale-h">
+  <h2 id="scale-h">Scale assessment</h2>
+  <div class="split">
+    <div>
+      <h3><span class="chip ok">Holds</span> What already scales</h3>
+      <ul>
+        <li><strong>Job queue.</strong> Postgres with <code>SKIP LOCKED</code>, claim tokens, and 2-second heartbeats. Several servers can share work, and a crashed job is requeued after 3 minutes.</li>
+        <li><strong>No central AI bill.</strong> Each listener's key pays, so AI spend and provider rate limits are per listener.</li>
+        <li><strong>Safe fetching.</strong> User-supplied URLs are DNS-pinned and private network addresses are refused.</li>
+        <li><strong>Credentials.</strong> Keys are encrypted with AES-256-GCM in the database and erased when a job completes, fails, or is canceled.</li>
+      </ul>
+    </div>
+    <div>
+      <h3><span class="chip bad">Breaks</span> What fails first, worst first</h3>
+      <ol>
+        <li><strong>No sharing across listeners.</strong> A thousand listeners importing one episode cause a thousand transcriptions and analyses. The cache key includes title, model, and prompt count, so even one listener's variations miss.</li>
+        <li><strong>All-or-nothing jobs.</strong> When the final quality gate fails, the paid transcription and extraction are discarded, and a retry repeats everything.</li>
+        <li><strong>Two pipelines.</strong> The TypeScript server and the Swift on-phone fallback implement different logic and will drift apart. The Swift one is the live path whenever the cloud is down.</li>
+        <li><strong>Operations.</strong> API and worker share one process. There are no metrics or traces, and listeners get no notification when a job finishes; the app polls.</li>
+        <li><strong>Onboarding.</strong> A new listener needs an OpenRouter account with credits before the first real lesson.</li>
+      </ol>
+    </div>
+  </div>
+  <p><strong>Throughput estimate.</strong> About 4–8 minutes per hour-long episode. Each instance runs 2 jobs at a time by default and 4 at most, so roughly 15–60 episodes per hour per instance. Capacity grows by adding instances.</p>
+  <p class="soft">Leftover code: Apple in-app purchase and credit-ledger tables and endpoints remain in the backend, although version 1.0 is free and has no purchases.</p>
+</section>
+
+<section id="cost" aria-labelledby="cost-h">
+  <h2 id="cost-h">Cost per episode</h2>
+  <p>Estimates for a 60-minute episode: about 9,000 words, roughly 20,000 tokens with timestamp markers, eight extraction calls, and one curation call. Reasoning tokens are not logged, so output ranges are wide.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>Today</th><th>With cheaper current options</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Transcription<span class="sub">only when the publisher has no transcript</span></td><td>Whisper large-v3: <span class="mono">~$0.03</span> per audio hour</td><td>Qwen3-ASR-1.7B at the same price with fewer errors; shared across listeners, so paid once per episode</td></tr>
+        <tr><td class="name">Question generation</td><td><span class="mono">~$0.40–0.80</span> Balanced (gpt-5.6-terra)<br><span class="mono">~$0.80–1.90</span> Maximum (gpt-6-astra curation)</td><td><span class="mono">~$0.02–0.03</span> with Claude Haiku 5.5 or gpt-6-luna, if quality holds</td></tr>
+        <tr><td class="name">Grading</td><td><span class="mono">~1¢</span> per answer</td><td>under <span class="mono">0.1¢</span> per answer, or free on-device</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model (OpenRouter, Oct 25)</th><th>Input $/M tokens</th><th>Output $/M tokens</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="name">openai/gpt-6-astra</td><td class="num">10.00</td><td class="num">50.00</td><td>Curation on the Maximum tier</td></tr>
+        <tr class="current"><td class="name">openai/gpt-5.6-terra</td><td class="num">2.00</td><td class="num">12.00</td><td>Extraction on every tier; curation and grading on Balanced (default)</td></tr>
+        <tr><td class="name">anthropic/claude-sonnet-5.5</td><td class="num">2.00</td><td class="num">10.00</td><td>Comparable alternative</td></tr>
+        <tr><td class="name">openai/gpt-5.6-luna</td><td class="num">0.20</td><td class="num">1.20</td><td>Curation on the Economical tier</td></tr>
+        <tr><td class="name">anthropic/claude-haiku-5.5</td><td class="num">0.10</td><td class="num">0.50</td><td>Candidate for extraction and curation</td></tr>
+        <tr><td class="name">openai/gpt-6-luna</td><td class="num">0.10</td><td class="num">0.50</td><td>Candidate for extraction and curation</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">In the cloud path only the curation model follows the listener's tier. Extraction always runs on gpt-5.6-terra, so the Economical and Free tiers still pay about $0.25–0.45 per hour of audio.</p>
+  <div class="callout bronze">
+    <span class="label">What cheap models change</span>
+    <p>At roughly 5¢ per episode, a capped free tier paid by the project becomes affordable: 10,000 episodes a month would cost about $500. That is a policy change, since the repo's rules currently forbid an Agora-owned AI key. The repo already contains the right quality test, <code>Backend/scripts/compare-curation-models.mjs</code>, which runs candidate models against the real gates.</p>
+  </div>
+</section>
+
+<section id="transcription" aria-labelledby="transcription-h">
+  <h2 id="transcription-h">Transcription in October 2026</h2>
+  <p>Error rates are word error rates from Hugging Face's Open ASR Leaderboard, averaged over its nine public test sets; lower is better. The leaderboard uses short clips, so any switch needs testing on 2–3 hour episodes first.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model</th><th>Kind</th><th>Error rate</th><th>Timestamps</th><th>Per audio hour</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="name">ElevenLabs Scribe v2</td><td>API, on OpenRouter</td><td class="num">4.55</td><td>word + speaker</td><td class="num">$0.22</td><td>Best tested long-form score (6.20); 90+ languages</td></tr>
+        <tr><td class="name">AssemblyAI Universal-3.5 Pro</td><td>API</td><td class="num">4.87</td><td>word + speaker</td><td class="num">$0.21–0.30</td><td>OpenRouter listing caps audio at 20 minutes</td></tr>
+        <tr><td class="name">Qwen3-ASR-1.7B</td><td>Open weights, Apache-2.0</td><td class="num">4.94</td><td>word, via a separate aligner</td><td class="num">$0.027</td><td>Best open model; 52 languages; no speaker labels</td></tr>
+        <tr><td class="name">NVIDIA Parakeet TDT 0.6B v3</td><td>Open weights, self-hosted</td><td class="num">5.58</td><td>word + segment</td><td class="num">~$0.001 GPU</td><td>Extremely fast; 24-minute attention window; weaker on long audio (9.10)</td></tr>
+        <tr class="current"><td class="name">Whisper large-v3 <span class="sub">used today</span></td><td>Open weights</td><td class="num">6.66</td><td>segment (word available)</td><td class="num">$0.027</td><td>Long-form 8.67; keep as a fallback</td></tr>
+        <tr><td class="name">Apple SpeechAnalyzer</td><td>On-device, iOS 26+</td><td class="num">~14 (vendor test)</td><td>yes</td><td class="num">free</td><td>Nothing to download; less accurate on long audio</td></tr>
+        <tr><td class="name">FluidAudio Parakeet v3</td><td>On-device, iOS 17+</td><td class="num">Parakeet-class</td><td>unverified</td><td class="num">free</td><td>About a 480 MB model; iPhone speed unpublished</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Not suitable here: gpt-transcribe, Cohere Transcribe, Granite Speech 5.0, and Canary-Qwen-2.5B document no timestamps; streaming-first models trade accuracy for latency; Sortformer v1 carries a non-commercial license.</p>
+  <p><strong>Python.</strong> The best open models are Python-first: NVIDIA NeMo runs Parakeet, Qwen3-ASR ships with its own forced aligner, and WhisperX adds word alignment and pyannote speaker labels. Self-hosting is cheapest per hour but moves the GPU bill to the project. Against OpenRouter's ~3¢ per hour, it pays off only at tens of thousands of audio hours a month (estimate).</p>
+  <div class="callout">
+    <span class="label">Recommendation</span>
+    <p>Replace Whisper large-v3 with Qwen3-ASR-1.7B through OpenRouter: the same price and about 25% fewer errors on the leaderboard. Choose Scribe v2 where speaker labels matter. <code>Backend/src/openAIClient.ts</code> line 16 swaps any model whose name lacks "whisper" back to Whisper, so the change needs a small code edit and a check that the provider returns segment timestamps.</p>
+  </div>
+</section>
+
+<section id="media" aria-labelledby="media-h">
+  <h2 id="media-h">Media sources</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Source</th><th>Status</th><th>How</th><th>Timing</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Podcasts (RSS, Apple)</td><td><span class="chip ok">Allowed</span></td><td>Publisher transcript tag first, otherwise transcribe the audio. This is what the app does today.</td><td>Precise</td></tr>
+        <tr><td class="name">Uploaded files</td><td><span class="chip ok">Allowed</span></td><td>New feature: the listener uploads a recording or video, transcribed like a podcast. Needs an upload flow and storage.</td><td>Precise</td></tr>
+        <tr><td class="name">YouTube, partner channels</td><td><span class="chip ok">Allowed</span></td><td>Official captions API with the channel owner's OAuth grant. About 40 videos a day on the default quota; stored data is capped at 30 days.</td><td>Precise</td></tr>
+        <tr><td class="name">YouTube, any public video</td><td><span class="chip warn">Limited</span></td><td>Gemini reads the YouTube URL (documented by Google, in preview), about $0.10–0.80 per hour. OpenRouter forwards YouTube links only to Google AI Studio; untested with listener keys.</td><td>Approximate; written by the model</td></tr>
+        <tr><td class="name">YouTube by scraping</td><td><span class="chip bad">Not allowed</span></td><td>youtube-transcript-api, yt-dlp, and transcript resellers break YouTube's Terms and Developer Policies and Apple guideline 5.2.3. Cloud IPs are blocked as well.</td><td>n/a</td></tr>
+        <tr><td class="name">Spotify-only shows</td><td><span class="chip bad">Not allowed</span></td><td>Spotify's developer policy bars feeding its content into AI models.</td><td>n/a</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Apple's auto-generated podcast transcripts have no documented third-party access. YouTube's embedded player API can pause and seek, so check-ins during YouTube videos are technically possible at approximate times; its terms need their own review before building.</p>
+</section>
+
+<section id="mcp" aria-labelledby="mcp-h">
+  <h2 id="mcp-h">Listener's own AI over MCP</h2>
+  <p>The preferred direction: each listener signs in with their own AI account and customizes an agent that talks to The Agora over MCP, running on that listener's own plan.</p>
+  <figure>
+    <div class="fig-scroll">
+      <svg viewBox="0 0 900 330" role="img" aria-label="Today, the listener's iPhone sends an API key and job to Agora's cloud, which calls OpenRouter models billed to that key. In the proposed mode, the listener's Claude or ChatGPT calls Agora's MCP server tools get_transcript and save_quiz, the Agora iOS app syncs quizzes through the same Agora account, and an on-device model grades spoken answers. Agora stores no AI credentials.">
+        <defs>
+          <marker id="d3-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head"/></marker>
+          <marker id="d3-arrow-key" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head-key"/></marker>
+          <marker id="d3-arrow-lapis" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="d-head-lapis"/></marker>
+        </defs>
+
+        <text x="20" y="26" class="d-title">Today</text>
+        <text x="84" y="26" class="d-ts">Agora calls the AI</text>
+        <text x="440" y="26" class="d-title">Proposed</text>
+        <text x="530" y="26" class="d-ts">the listener's AI calls Agora</text>
+        <line x1="415" y1="12" x2="415" y2="320" class="d-divider"/>
+
+        <rect x="20" y="60" width="140" height="62" rx="10" class="d-box"/>
+        <text x="90" y="86" text-anchor="middle" class="d-tb">Listener's iPhone</text>
+        <text x="90" y="105" text-anchor="middle" class="d-ts">key in Keychain</text>
+
+        <rect x="230" y="60" width="165" height="62" rx="10" class="d-box"/>
+        <text x="312" y="86" text-anchor="middle" class="d-tb">Agora cloud</text>
+        <text x="312" y="105" text-anchor="middle" class="d-ts">key copy during jobs</text>
+
+        <rect x="230" y="218" width="165" height="62" rx="10" class="d-box"/>
+        <text x="312" y="244" text-anchor="middle" class="d-tb">OpenRouter models</text>
+        <text x="312" y="263" text-anchor="middle" class="d-ts">billed to listener's key</text>
+
+        <line x1="160" y1="91" x2="227" y2="91" class="d-line-key" marker-end="url(#d3-arrow-key)"/>
+        <text x="195" y="82" text-anchor="middle" class="d-t-key">key + job</text>
+        <line x1="312" y1="122" x2="312" y2="215" class="d-line" marker-end="url(#d3-arrow)"/>
+        <text x="322" y="172" class="d-ts">calls models</text>
+        <path d="M90 122 V249 H227" class="d-line-key" marker-end="url(#d3-arrow-key)"/>
+        <text x="158" y="240" text-anchor="middle" class="d-t-key">key + answer</text>
+        <text x="207" y="310" text-anchor="middle" class="d-t-key">AI credentials reach Agora's server</text>
+
+        <rect x="440" y="60" width="180" height="62" rx="10" class="d-box-lapis"/>
+        <text x="530" y="86" text-anchor="middle" class="d-tb">Listener's Claude</text>
+        <text x="530" y="105" text-anchor="middle" class="d-ts">or ChatGPT · their plan</text>
+
+        <rect x="730" y="60" width="155" height="62" rx="10" class="d-box"/>
+        <text x="807" y="86" text-anchor="middle" class="d-tb">Agora MCP server</text>
+        <text x="807" y="105" text-anchor="middle" class="d-ts">transcripts · checks</text>
+
+        <rect x="730" y="218" width="155" height="62" rx="10" class="d-box"/>
+        <text x="807" y="244" text-anchor="middle" class="d-tb">Agora iOS app</text>
+        <text x="807" y="263" text-anchor="middle" class="d-ts">same Agora account</text>
+
+        <rect x="440" y="218" width="180" height="62" rx="10" class="d-box"/>
+        <text x="530" y="244" text-anchor="middle" class="d-tb">On-device model</text>
+        <text x="530" y="263" text-anchor="middle" class="d-ts">grades spoken answers</text>
+
+        <line x1="620" y1="91" x2="726" y2="91" class="d-line-lapis" marker-end="url(#d3-arrow-lapis)"/>
+        <text x="673" y="80" text-anchor="middle" class="d-tm-lapis">get_transcript</text>
+        <text x="673" y="110" text-anchor="middle" class="d-tm-lapis">save_quiz</text>
+
+        <line x1="807" y1="122" x2="807" y2="215" class="d-line" marker-end="url(#d3-arrow)"/>
+        <text x="797" y="172" text-anchor="end" class="d-ts">quizzes sync</text>
+
+        <line x1="730" y1="240" x2="623" y2="240" class="d-line" marker-end="url(#d3-arrow)"/>
+        <text x="676" y="232" text-anchor="middle" class="d-ts">spoken answer</text>
+        <line x1="620" y1="260" x2="727" y2="260" class="d-line" marker-end="url(#d3-arrow)"/>
+        <text x="676" y="276" text-anchor="middle" class="d-ts">grade + feedback</text>
+
+        <text x="660" y="310" text-anchor="middle" class="d-t-lapis">No AI credentials stored at Agora</text>
+      </svg>
+    </div>
+    <figcaption>The call direction flips. Today Agora calls the AI with a copy of the listener's key. In the proposed mode the listener's own assistant calls Agora's tools, Agora never holds AI credentials, and the phone grades answers on-device.</figcaption>
+  </figure>
+
+  <h3>How a quiz gets made</h3>
+  <ol class="steps">
+    <li><strong>Connect</strong><span>The listener adds Agora's MCP server as a connector in Claude (web or desktop; it then works on mobile) and signs in to their Agora account during the connector's OAuth step.</span></li>
+    <li><strong>Customize</strong><span>They install Agora's plugin, which bundles a skill with the connector, and adjust difficulty, question count, style, and topics.</span></li>
+    <li><strong>Ask</strong><span>"Quiz me on this episode," with a link, or "prepare quizzes for my backlog."</span></li>
+    <li><strong>Read</strong><span>The assistant calls <code>get_transcript(episode, page)</code>. Agora returns the cached, timed transcript in pages of about 35,000 characters.</span></li>
+    <li><strong>Write</strong><span>The assistant drafts questions with verbatim quotes and calls <code>save_quiz</code>.</span></li>
+    <li><strong>Verify</strong><span>Agora's server runs the existing gates from <code>promptPipeline.ts</code>: verbatim quotes, answer alignment, spread across the episode, and timing from real timestamps. It returns specific rejections the assistant can fix.</span></li>
+    <li><strong>Listen</strong><span>The iOS app, signed in to the same Agora account, plays the episode with check-ins and grades spoken answers on the device.</span></li>
+  </ol>
+
+  <div class="split">
+    <div>
+      <h3><span class="chip ok">Allowed</span> What signing in can mean</h3>
+      <ul>
+        <li>The listener signs in to Claude or ChatGPT inside the vendor's own app.</li>
+        <li>Inside the connector setup, they sign in to their Agora account through OAuth. Agora receives an account link, never AI credentials.</li>
+        <li>Claude's free plan allows one custom connector; Pro, Max, Team, and Enterprise allow more.</li>
+      </ul>
+    </div>
+    <div>
+      <h3><span class="chip bad">Not allowed</span> What it can't mean</h3>
+      <ul>
+        <li>Agora's app or server signing in to Claude.ai on the listener's behalf to use their plan. Anthropic reserves consumer sign-in for its own apps and bars routing requests through plan credentials.</li>
+        <li>Using a ChatGPT plan from a hosted app. OpenAI's "Sign in with ChatGPT" plan usage is a limited preview for open-source and locally run apps.</li>
+        <li>MCP sampling, where a server borrows the client's model. The 2026-07-28 spec deprecated it, and new implementations should not adopt it.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>How listeners customize their agent</h3>
+  <p>MCP supplies the tools, and the instructions live elsewhere. A Claude plugin can bundle an Agora skill (quiz rules, difficulty, tone) with the Agora connector, so a listener installs one thing and adjusts it.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Surface</th><th>What the listener controls</th><th>Plans</th><th>Mobile</th><th>Runs without a chat</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Claude plugin</td><td>One install bundling the Agora skill and connector</td><td>Pro and up (directory)</td><td>Once the connector is connected</td><td>Through scheduled tasks</td></tr>
+        <tr><td class="name">Claude skill</td><td>Written instructions, on or off, invoked with <code>/</code></td><td>Pro and up</td><td>Loads in chat</td><td>No</td></tr>
+        <tr><td class="name">Claude project</td><td>Instructions and reference files</td><td>All plans (Free: 5 projects)</td><td>Not stated</td><td>No</td></tr>
+        <tr><td class="name">Claude connector</td><td>Per-chat toggle, per-tool approval</td><td>All plans (Free: 1 custom)</td><td>Yes</td><td>Inside scheduled tasks</td></tr>
+        <tr><td class="name">Claude Code scheduled tasks</td><td>Prompt and connectors; schedule, API, or GitHub trigger</td><td>Pro and up (research preview)</td><td>Not stated</td><td>Yes, in the cloud</td></tr>
+        <tr><td class="name">ChatGPT plugin (MCP)</td><td>Directory listing or custom MCP server</td><td>Plus and up</td><td>Yes</td><td>Through scheduled tasks</td></tr>
+        <tr><td class="name">ChatGPT scheduled tasks</td><td>Prompt; schedule or app events</td><td>Plus and up</td><td>Event tasks</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Custom GPTs support only Actions and are being replaced by plugins. MCP prompts and resources have no documented chat interface yet.</p>
+  <div class="callout bronze">
+    <span class="label">Background runs</span>
+    <p>A listener can set up "prepare quizzes for new backlog episodes" as a Claude Code scheduled task that runs in the cloud on their own plan. These tasks also accept an HTTP trigger, but Agora storing a listener's trigger token to fire it is likely barred by Anthropic's terms; get written confirmation before building on it. On ChatGPT, MCP Events let a server send signed webhooks that start tasks in Work chats on web and desktop.</p>
+  </div>
+
+  <h3>Linking the listener's Agora account</h3>
+  <ul>
+    <li>Public tools work before sign-in. The first protected call returns 401 with a <code>resource_metadata</code> pointer, Claude shows a Connect card, the listener signs in on Agora's page, and Claude retries the call.</li>
+    <li>Claude requires the redirect <code>https://claude.ai/api/mcp/auth_callback</code>, PKCE with S256, client ID metadata documents or dynamic registration, rotating refresh tokens, a token endpoint that answers within 10 seconds, and read-only or destructive hints on every tool.</li>
+    <li>ChatGPT redirects to <code>https://chatgpt.com/connector_platform_oauth_redirect</code> and also accepts metadata documents or dynamic registration.</li>
+    <li>Offering Sign in with Apple on that page gives the iOS app the same Agora account. App Review guideline 5.1.1(v) then requires account deletion inside the app.</li>
+  </ul>
+
+  <h3>Grading during playback</h3>
+  <p>A check-in needs a grade within seconds, mid-episode, often hands-free. No policy route lets the app call the listener's subscription model, and chat or scheduled runs are far too slow. Grading has to happen on the phone or through a small API key.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>Reach</th><th>Cost</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Apple Foundation Models</td><td>iOS 26+ on Apple Intelligence devices (iPhone 15 Pro and later)</td><td>Free</td><td>About 3B parameters and a 4,096-token window, enough for a question, an expected answer, and a spoken reply. Structured output through <code>@Generable</code>. Latency is unpublished, so benchmark on devices.</td></tr>
+        <tr><td class="name">Built-in offline heuristic</td><td>Every device</td><td>Free</td><td>Already in the app as the offline fallback. Rougher on paraphrases.</td></tr>
+        <tr><td class="name">Listener API key for grading only</td><td>Every device</td><td>Under 0.1¢ per answer on small models</td><td>Brings back the OpenRouter sign-up for listeners who want richer feedback.</td></tr>
+        <tr><td class="name">Review later in chat</td><td>Every device</td><td>Listener's plan</td><td>The assistant grades saved answers afterwards, with no live feedback.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Apple describes its on-device model as not designed for world knowledge or advanced reasoning. Comparing a reply against a supplied expected answer is a narrow task that suits it. The app targets iOS 16, so older devices fall back to the heuristic.</p>
+
+  <h3>Limits of this mode</h3>
+  <ul>
+    <li>Runs start in a chat or on a schedule the listener sets up. Agora cannot run a one-button import on the listener's plan, which conflicts with the repo's one-button guardrail, so this needs to be a second mode or the guardrail has to change.</li>
+    <li>Question quality depends on the listener's model and plan limits. Server-side gates keep weak questions out but can trigger retries.</li>
+    <li>Claude's web and desktop apps cap a tool result near 150,000 characters and a call at 240 seconds, so transcripts are paged and long work uses job handles.</li>
+    <li>Transcription still has to be paid for. Without a listener API key, Agora pays about 3¢ per hour (shared across listeners), uses publisher transcripts, or transcribes on the phone.</li>
+    <li>ChatGPT's plan eligibility and mobile support for custom MCP servers are unverified, and its directory rules ban "unofficial connectors," a risk for a YouTube tool.</li>
+  </ul>
+</section>
+
+<section id="path" aria-labelledby="path-h">
+  <h2 id="path-h">Recommended path</h2>
+  <div class="phases">
+    <article class="phase">
+      <p class="when">This week</p>
+      <h3>Now</h3>
+      <ol>
+        <li>Restore the backend or point <code>AGORA_API_BASE_URL</code> at its new address.<span class="est">hours</span></li>
+        <li>Run the model-comparison script with Claude Haiku 5.5 and gpt-6-luna for extraction and curation, and let extraction follow the listener's tier.<span class="est">1–2 hours; up to 10–25× cheaper</span></li>
+      </ol>
+    </article>
+    <article class="phase">
+      <p class="when">This month</p>
+      <h3>Next</h3>
+      <ol>
+        <li>Switch transcription to Qwen3-ASR-1.7B and test 2–3 hour episodes.<span class="est">half a day</span></li>
+        <li>Share transcripts across listeners by feed GUID and audio URL, and save each transcript before analysis so retries don't pay twice. The privacy policy promises 7-day deletion and needs updating.<span class="est">1–2 days</span></li>
+        <li>Make the phone a thin client and retire the duplicate Swift pipeline.<span class="est">2–4 days</span></li>
+      </ol>
+    </article>
+    <article class="phase">
+      <p class="when">This quarter</p>
+      <h3>Later</h3>
+      <ol>
+        <li>Build the Agora MCP server: accounts (the backend already has Sign in with Apple code), <code>get_transcript</code>, <code>save_quiz</code> with the existing gates, and preferences.<span class="est">1–2 weeks for a first version</span></li>
+        <li>Grade on-device with Apple Foundation Models on iOS 26+ Apple Intelligence iPhones, keeping the existing offline heuristic as the fallback.</li>
+        <li>Add uploads, then YouTube through Gemini for end-of-episode quizzes after a timing test, and partner-channel captions for check-ins.</li>
+      </ol>
+    </article>
+  </div>
+  <p class="table-note">Time estimates assume one developer familiar with the codebase. They are estimates, not measurements.</p>
+</section>
+
+<section id="questions" aria-labelledby="questions-h">
+  <h2 id="questions-h">Open questions for the team</h2>
+  <ul>
+    <li>Should Agora pay for transcription (about 3¢ per hour, shared) so the MCP mode works without any listener API key? The repo's rules forbid an Agora-owned AI key today.</li>
+    <li>Can the one-button guardrail allow a second, chat-started mode?</li>
+    <li>How many listeners have iPhones that support on-device grading?</li>
+    <li>Is a long-lived shared transcript cache acceptable under the privacy policy, which currently promises deletion within 7 days?</li>
+    <li>Will Anthropic confirm in writing whether Agora may fire a scheduled task the listener created?</li>
+    <li>Who owns the production Railway service, and why does its address return 404?</li>
+  </ul>
+</section>
+
+<section id="unverified" aria-labelledby="unverified-h">
+  <h2 id="unverified-h">Unverified items</h2>
+  <ul>
+    <li>Whether OpenRouter returns word timestamps for Qwen3-ASR and Scribe v2, and how open models perform on 2–3 hour episodes.</li>
+    <li>How accurate Gemini's YouTube timestamps are, and whether its YouTube input works through listeners' OpenRouter keys.</li>
+    <li>ChatGPT plan eligibility and mobile support for custom MCP servers; OpenAI's consumer-terms wording.</li>
+    <li>How reliably assistants complete the read, write, and save loop; how much plan usage one quiz consumes.</li>
+    <li>Whether Anthropic's terms allow Agora to trigger a listener's scheduled task; how MCP prompts appear in chat apps.</li>
+    <li>On-device speed: transcription on iPhone, and grading latency with Apple Foundation Models.</li>
+    <li>The per-episode cost estimates, until reasoning-token usage is logged.</li>
+  </ul>
+</section>
+
+<section id="sources" aria-labelledby="sources-h">
+  <h2 id="sources-h">Sources and method</h2>
+  <p>Code, configuration, and release notes were read directly from the repository at commit 572a4f6. Model prices come from OpenRouter's public models API on October 25, 2026. External claims come from primary documentation gathered by research agents on the same day; general web search was unavailable, so discovery relied on official docs, specs, and repositories.</p>
+  <div class="sources">
+    <div>
+      <h3>Transcription and on-device AI</h3>
+      <ul>
+        <li><a href="https://developer.apple.com/videos/play/wwdc2025/286/">Apple Foundation Models, WWDC25</a> · <a href="https://developer.apple.com/documentation/technotes/tn3193-managing-the-on-device-foundation-model-s-context-window">TN3193 context window</a> · <a href="https://support.apple.com/en-us/121115">Apple Intelligence availability</a> (Oct 22, 2026)</li>
+        <li><a href="https://huggingface.co/spaces/hf-audio/open_asr_leaderboard">Open ASR Leaderboard</a> (updated Oct 22, 2026)</li>
+        <li><a href="https://github.com/huggingface/open_asr_leaderboard">Leaderboard repository</a> (long-form snapshot, Mar 2026)</li>
+        <li><a href="https://openrouter.ai/docs/api/api-reference/stt/create-transcription">OpenRouter transcription API</a></li>
+        <li><a href="https://openrouter.ai/collections/speech-to-text-models">OpenRouter speech-to-text models</a></li>
+        <li><a href="https://www.assemblyai.com/pricing">AssemblyAI pricing</a> · <a href="https://elevenlabs.io/pricing/api">ElevenLabs API pricing</a></li>
+        <li><a href="https://developer.apple.com/videos/play/wwdc2025/277/">Apple SpeechAnalyzer, WWDC25</a> · <a href="https://developer.apple.com/documentation/updates/speech">Speech updates (Jun 2026)</a></li>
+        <li><a href="https://www.argmaxinc.com/blog/apple-and-argmax">Argmax on SpeechAnalyzer</a> (vendor, Jun 2025)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>YouTube and podcasts</h3>
+      <ul>
+        <li><a href="https://developers.google.com/youtube/v3/docs/captions/download">YouTube captions.download</a> · <a href="https://developers.google.com/youtube/terms/developer-policies">Developer Policies</a> (Oct 2026)</li>
+        <li><a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a></li>
+        <li><a href="https://developer.apple.com/app-store/review/guidelines/">App Store Review Guidelines 5.2.2–5.2.3</a></li>
+        <li><a href="https://ai.google.dev/gemini-api/docs/video-understanding">Gemini video understanding</a> · <a href="https://ai.google.dev/gemini-api/docs/pricing">Gemini pricing</a> (Oct 2026)</li>
+        <li><a href="https://openrouter.ai/docs/features/multimodal/videos">OpenRouter video input</a></li>
+        <li><a href="https://github.com/jdepoix/youtube-transcript-api">youtube-transcript-api</a> · <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> (issue history 2025–26)</li>
+        <li><a href="https://github.com/Podcastindex-org/podcast-namespace">Podcasting 2.0 namespace</a> · <a href="https://podcasters.apple.com/support/5316-transcripts-on-apple-podcasts">Apple Podcasts transcripts</a> · <a href="https://developer.spotify.com/policy">Spotify developer policy</a></li>
+      </ul>
+    </div>
+    <div>
+      <h3>MCP and AI accounts</h3>
+      <ul>
+        <li><a href="https://support.claude.com/en/articles/11175166">Claude custom connectors</a> · <a href="https://claude.com/docs/connectors/building">Building connectors</a> · <a href="https://claude.com/docs/connectors/building/authentication.md">Connector authentication</a></li>
+        <li><a href="https://claude.com/docs/skills/overview.md">Claude skills</a> · <a href="https://claude.com/docs/plugins/platform-support.md">Claude plugins</a> · <a href="https://code.claude.com/docs/en/routines">Scheduled tasks</a> (research preview)</li>
+        <li><a href="https://learn.chatgpt.com/docs/plugins.md">ChatGPT plugins</a> · <a href="https://learn.chatgpt.com/docs/automations.md">ChatGPT scheduled tasks</a></li>
+        <li><a href="https://code.claude.com/docs/en/legal-and-compliance">Claude Code legal and compliance</a> · <a href="https://www.anthropic.com/legal/consumer-terms">Anthropic Consumer Terms</a></li>
+        <li><a href="https://github.com/modelcontextprotocol/modelcontextprotocol">MCP specification</a> (release 2026-07-28)</li>
+        <li><a href="https://developers.openai.com/plugins/build/auth.md">OpenAI plugin auth</a> · <a href="https://developers.openai.com/plugins/plugin-guidelines.md">Plugin guidelines</a> · <a href="https://developers.openai.com/plugins/build/mcp-events.md">MCP Events</a></li>
+        <li><a href="https://developers.openai.com/siwc/token-sharing-open-source.md">Sign in with ChatGPT, open-source preview</a></li>
+        <li><a href="https://openrouter.ai/docs/guides/overview/auth/oauth">OpenRouter OAuth PKCE</a></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Repository files cited</h3>
+      <ul>
+        <li><code>Backend/src/worker.ts</code>: job queue, heartbeats, requeue</li>
+        <li><code>Backend/src/transcription.ts</code>: download, FFmpeg split, safe fetch</li>
+        <li><code>Backend/src/promptPipeline.ts</code>: extraction, curation, gates</li>
+        <li><code>Backend/src/openAIClient.ts</code>: OpenRouter calls, Whisper fallback</li>
+        <li><code>Backend/src/config.ts</code>: models, concurrency, retention</li>
+        <li><code>Sources/PromptEditorView.swift</code>: cloud call and on-phone fallback</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  <p>Prepared October 25, 2026 from the public repository and primary documentation. Figures marked as estimates are calculations, not measurements.</p>
+</footer>
+
+</main>
+</div>
