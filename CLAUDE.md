@@ -1,5 +1,11 @@
 # The Agora LA Development Guide
 
+## Research Branch Notice
+
+You are on a research branch: `research/agora-lite-handoff` or a working branch made from it, such as `shane/agora-lite`. It carries an evaluation and a plan for a small Google Cloud version of the app ("Agora Lite"), not shipped app changes. Read `docs/research/HANDOFF.md` before doing anything else.
+
+While you are on such a branch, this notice overrides the publishing step below: commit to the current branch and push it with `git push claude HEAD:<current branch name>`. Never push to `main` or merge into it until the team agrees. When this work is merged into `main`, delete this notice from `CLAUDE.md` and `AGENTS.md` as part of the merge.
+
 ## Project Map
 
 - `TheAgoraLAPod.xcodeproj`: open this project for the iOS app.

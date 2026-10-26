@@ -14,7 +14,7 @@ Build **Agora Lite**: keep the existing iOS app, move the backend to **Cloud Run
 |---|---|---|
 | Where does the backend run? | Cloud Run service (`agora-api`) plus a Cloud Run job (`agora-analyze`) | Scales to zero, pay per second, no servers to manage. Jobs run up to 7 days per task (1 hour with a GPU). |
 | Database | Cloud SQL for PostgreSQL, `db-f1-micro` | The backend already uses Postgres (job queue, results). About $7.67/month. |
-| Transcription | OpenRouter speech-to-text: Qwen3-ASR-1.7B, with Whisper large-v3 as a fallback | Best open model, $0.027 per audio hour, no GPU to run. Confirm OpenRouter returns its timestamps first (section 6). |
+| Transcription | OpenRouter speech-to-text: Qwen3-ASR-1.7B, with Whisper large-v3 as a fallback | Best open model, $0.029 per audio hour, no GPU to run. OpenRouter lists segment and word timestamps for `qwen/qwen3-asr-1.7b`; confirm the response format first (section 6). |
 | Question writing | Claude Haiku 5.5 or gpt-6-luna ($0.10 / $0.50 per million tokens), through OpenRouter or Vertex AI | About 2–3¢ per hour-long episode, against roughly $0.40–0.80 today. |
 | Who pays for AI | A project-owned OpenRouter key with a hard credit limit, kept in Secret Manager | Testers need no setup. **Needs owner sign-off:** the repo's rules forbid an Agora-owned AI key. The rule-compliant alternative is the app's existing listener sign-in (section 4). |
 | Client | The existing iOS app on TestFlight | Already built and in testers' hands; only `AGORA_API_BASE_URL` changes. |
@@ -133,8 +133,9 @@ Whichever option is used, add **Firebase App Check (App Attest)** to the API bef
 
 | Option | Accuracy (Open ASR Leaderboard WER) | Timestamps | Cost per audio hour | Operations |
 |---|---|---|---|---|
-| **OpenRouter Qwen3-ASR-1.7B** (open, Apache-2.0) | 4.94 average; 5.84 on earnings calls | Through OpenRouter: **unverified**, test first | $0.027 | None |
-| OpenRouter Whisper large-v3 (current) | 6.66 average | Segment, verified in this codebase | $0.027 | None |
+| **OpenRouter Qwen3-ASR-1.7B** (open, Apache-2.0) | 4.94 average; 5.84 on earnings calls | Segment and word, as listed by OpenRouter; response format still to confirm | $0.029 | None |
+| OpenRouter Whisper large-v3 (current) | 6.66 average | Segment, verified in this codebase | $0.029 | None |
+| OpenRouter Microsoft MAI-Transcribe-2 (API) | Not on the leaderboard | Segment (`verbose_json`) and word; diarization option | $0.10 | None |
 | OpenRouter ElevenLabs Scribe v2 (API) | 4.55 average, best tested on long audio | Word + speaker labels | $0.22 | None |
 | **Self-hosted on Cloud Run GPU**: Qwen3-ASR + ForcedAligner + pyannote | Same model; full-length accuracy unpublished | Word (aligner, ≤5-minute windows) + speaker labels | ~1–5¢ including cold start (estimate) | Build a GPU container; L4 quota is 3 GPUs per region to start |
 | Google Speech-to-Text V2, Chirp 3 | Not on the leaderboard | Word timestamps listed as **unsupported**; enabling them degrades accuracy and caps batch files at 20 minutes | $0.18 (dynamic batch, standard models) | None |
@@ -197,7 +198,7 @@ Episode estimates assume about 9,000 words, roughly 20,000 tokens with timestamp
 
 ## 6. Risks and unknowns
 
-1. **Qwen3-ASR timestamps through OpenRouter are unverified.** Run a two-model comparison on one real episode before switching (about 3¢ of usage).
+1. **Qwen3-ASR timestamps through OpenRouter are listed but untested here.** Run a two-model comparison on one real episode before switching (about 3¢ of usage).
 2. **Phone fallback bug.** The on-phone pipeline caps responses at 10,000 tokens while asking gpt-5.6-terra for high reasoning (`Sources/OpenRouterClient.swift:316–317`). The October 25 test import produced a full transcript but zero questions with "The AI returned an unreadable response." Fix or disable the phone fallback for the test.
 3. **Non-Whisper models are blocked in code.** `Backend/src/openAIClient.ts:16` replaces any model whose name lacks "whisper" with Whisper large-v3.
 4. **Google budgets don't stop spending.** Use the OpenRouter per-key limit (option B) or a per-device quota in the API (option C).
@@ -216,7 +217,7 @@ Assumptions: 20 testers × 10 one-hour episodes = 200 episodes a month, no publi
 | Cloud Run `agora-analyze` | ~7 minutes × 2 vCPU per episode ≈ 170,000 vCPU-seconds | ~$0–5 |
 | Cloud SQL `db-f1-micro` + 10 GB SSD | $0.0105/hour + storage | ~$9–10 |
 | Cloud Storage, Secret Manager, Artifact Registry | Small objects, a few secrets, one image | ~$1 |
-| Transcription (Qwen3-ASR via OpenRouter) | 200 hours × $0.027 | ~$5.40 |
+| Transcription (Qwen3-ASR via OpenRouter) | 200 hours × $0.0288 | ~$5.80 |
 | Question writing (Haiku 5.5) | 200 × ~$0.03 | ~$6 |
 | Grading (Haiku 5.5) | 1,600 answers × ~$0.0005 | ~$1 |
 | **Total** | | **~$20–30** |
@@ -294,7 +295,7 @@ gcloud run jobs deploy agora-analyze --source Backend --region us-central1 \
 | Vertex AI Claude Haiku 5.5 | $0.10 / $0.50 per 1M (≤100K input tokens); batch $0.05 / $0.25 | same |
 | OpenRouter Claude Haiku 5.5 / gpt-6-luna | $0.10 / $0.50 per 1M | openrouter.ai/api/v1/models |
 | OpenRouter gpt-5.6-terra / gpt-6-astra | $2 / $12 and $10 / $50 per 1M | same |
-| OpenRouter speech-to-text | Qwen3-ASR $0.027/h; Whisper large-v3 $0.027/h; turbo $0.012/h; Scribe v2 $0.22/h | openrouter.ai/collections/speech-to-text-models (via research agent) |
+| OpenRouter speech-to-text | `qwen/qwen3-asr-1.7b` $0.0288/h; `openai/whisper-large-v3` $0.0288/h; `openai/whisper-large-v3-turbo` $0.0108/h; `nvidia/parakeet-tdt-0.6b-v3` $0.09/h; `microsoft/mai-transcribe-2` $0.10/h; `elevenlabs/scribe-v2` $0.2196/h | openrouter.ai/collections/speech-to-text-models |
 
 Not verified directly (Google's free-tier page did not load): the $300 / 90-day new-customer credit, and Always Free limits for Cloud Storage, Firestore, and Secret Manager.
 
